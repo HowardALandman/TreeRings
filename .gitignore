@@ -1,0 +1,15 @@
+# Sources only.  Everything the pipeline can regenerate stays out of git.
+
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Bulk data lives on the external drive (/Volumes/Expansion/EHD); this is the
+# local fallback used when that drive is not mounted.
+/data/
+
+# Generated web payloads: rebuild with `python -m ehd.emit`.
+/web/data/
+
+.DS_Store

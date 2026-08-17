@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>European Tree-Ring Archive</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>European Tree-Ring Archive</h1>
+    <span class="subtitle" id="headline">loading…</span>
+    <span class="spacer"></span>
+    <button id="theme" title="Toggle light / dark">◐</button>
+  </header>
+
+  <div class="controls">
+    <div class="control">
+      <label for="mode">Layout</label>
+      <select id="mode">
+        <option value="band">By taxon</option>
+        <option value="unified">Packed together</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <label for="era">Era</label>
+      <select id="era">
+        <option value="all">All time</option>
+        <option value="pre1000">Before 1000 CE</option>
+        <option value="pre1500">Before 1500 CE</option>
+        <option value="medieval">500 – 1500 CE</option>
+        <option value="ancient">Before 1 CE</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <button id="reset">Reset view</button>
+    </div>
+
+    <span class="spacer"></span>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <canvas id="canvas"></canvas>
+    <div id="tooltip" role="status" aria-live="polite"></div>
+
+    <aside id="detail" aria-label="Log detail">
+      <button class="close" id="detail-close" aria-label="Close">×</button>
+      <h2 id="d-title">—</h2>
+      <div class="sub" id="d-sub"></div>
+      <canvas id="spark"></canvas>
+      <div class="spark-caption" id="d-spark-caption"></div>
+      <dl id="d-fields"></dl>
+    </aside>
+
+    <div id="loading">loading corpus…</div>
+  </div>
+
+  <footer>
+    <span id="f-counts"></span>
+    <span id="f-provenance"></span>
+    <span>Drag to pan · wheel to zoom time · shift+wheel to zoom rows</span>
+  </footer>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

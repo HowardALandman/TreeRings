@@ -1,0 +1,360 @@
+"""Assemble the deduplicated log corpus with metadata attached.
+
+Three separate duplication traps live in the ITRDB directory, and each one
+inflates the log count if ignored:
+
+1. ``foo-noaa.rwl`` is the NOAA-template re-encoding of ``foo.rwl``.  2397 of
+   the 2411 such files have a legacy twin holding the same data.
+2. A site code carries per-variable variants - ``brit048w`` (ring width),
+   ``brit048e`` (earlywood), ``brit048x`` (maximum density) - all measured on
+   the *same physical trees*, with the same series IDs and identical spans.
+   Left alone these triple some sites: 1151 of 3212 legacy files are variants.
+3. Series IDs repeat across sites, so they are only unique when qualified by
+   their site code.
+
+We therefore keep one file per site code, preferring total ring width, and key
+every log on ``site/series_id``.
+
+Metadata is merged from the NOAA-template headers (structured and complete),
+falling back to the study API.  The legacy Tucson header is a last resort: its
+layout varies so much between files that parsing it reliably is not worth it.
+"""
+
+from __future__ import annotations
+
+import glob
+import json
+import os
+import re
+from dataclasses import dataclass, field
+
+from . import config
+from .rwl import Series, parse_rwl
+
+# Site codes always end in digits; anything after that is a variable suffix.
+SITE_RE = re.compile(r"^([a-z]+\d+)([a-z]*)$")
+
+# Preference order when a site offers several measured variables.  Widths come
+# before densities because a width file is the canonical ring-width record; the
+# span is identical either way, so this only affects which values we show.
+VARIANT_PREFERENCE = ["", "w", "e", "l", "t", "i", "p", "n", "x"]
+
+VARIANT_LABEL = {
+    "": "total ring width",
+    "w": "ring width",
+    "e": "earlywood width",
+    "l": "latewood width",
+    "t": "latewood percent",
+    "i": "earlywood density",
+    "p": "latewood density",
+    "n": "minimum density",
+    "x": "maximum density",
+}
+
+# Genus from the first two letters of the ITRDB 4-letter species code.
+GENUS = {
+    "QU": ("Quercus", "oak"),
+    "PI": ("Pinus", "pine"),
+    "PC": ("Picea", "spruce"),
+    "AB": ("Abies", "fir"),
+    "LA": ("Larix", "larch"),
+    "FA": ("Fagus", "beech"),
+    "JU": ("Juniperus", "juniper"),
+    "PS": ("Pseudotsuga", "douglas-fir"),
+    "TS": ("Tsuga", "hemlock"),
+    "CD": ("Cedrus", "cedar"),
+    "BE": ("Betula", "birch"),
+    "FR": ("Fraxinus", "ash"),
+    "CA": ("Castanea", "chestnut"),
+    "AC": ("Acer", "maple"),
+    "AL": ("Alnus", "alder"),
+    "PO": ("Populus", "poplar"),
+    "SA": ("Salix", "willow"),
+    "TA": ("Taxus", "yew"),
+    "UL": ("Ulmus", "elm"),
+    "CU": ("Cupressus", "cypress"),
+    "JG": ("Juglans", "walnut"),
+    "TI": ("Tilia", "lime"),
+    "SO": ("Sorbus", "rowan"),
+    "CR": ("Crataegus", "hawthorn"),
+    "OL": ("Olea", "olive"),
+    "PT": ("Platanus", "plane"),
+}
+
+# Taxa called out by name in the visualization; everything else is grouped.
+FOCUS_GROUPS = {"oak", "pine"}
+
+
+@dataclass
+class Log:
+    """One physical log, ready to draw."""
+
+    key: str  # site/series_id - unique across the corpus
+    site: str
+    series_id: str
+    first_year: int
+    last_year: int
+    n_measured: int
+    values: list[int | None]
+    variant: str
+    # metadata, best-effort
+    species_code: str = ""
+    species_name: str = ""
+    common_name: str = ""
+    genus: str = ""
+    group: str = "other"
+    site_name: str = ""
+    location: str = ""
+    lat: float | None = None
+    lon: float | None = None
+    elevation: str = ""
+    investigators: str = ""
+    study_name: str = ""
+    doi: str = ""
+    url: str = ""
+    dating: str = "absolute"
+
+    @property
+    def n_rings(self) -> int:
+        return self.last_year - self.first_year + 1
+
+
+@dataclass
+class CorpusStats:
+    n_files_listed: int = 0
+    n_files_used: int = 0
+    n_files_skipped_noaa: int = 0
+    n_files_skipped_variant: int = 0
+    n_files_unmatched: int = 0
+    n_files_empty: int = 0
+    n_logs: int = 0
+    n_floating: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+
+def split_site_variant(filename: str) -> tuple[str, str] | None:
+    """``brit048w.rwl`` -> ``('brit048', 'w')``.  None if it does not fit."""
+    stem = os.path.basename(filename)
+    if stem.endswith(".rwl"):
+        stem = stem[: -len(".rwl")]
+    if stem.endswith("-noaa"):
+        stem = stem[: -len("-noaa")]
+    m = SITE_RE.match(stem)
+    if not m:
+        return None
+    return m.group(1), m.group(2)
+
+
+def select_files(paths: list[str], stats: CorpusStats) -> dict[str, str]:
+    """Choose one file per site code.  Returns ``{site_code: path}``."""
+    best: dict[str, tuple[int, str]] = {}
+    for p in paths:
+        name = os.path.basename(p)
+        if name.endswith("-noaa.rwl"):
+            stats.n_files_skipped_noaa += 1
+            continue
+        split = split_site_variant(name)
+        if split is None:
+            # Hand-named oddities such as germ14_corrected.rwl. Keyed on their
+            # own stem so they are kept rather than quietly dropped.
+            stats.n_files_unmatched += 1
+            best.setdefault(name[:-4], (len(VARIANT_PREFERENCE), p))
+            continue
+        site, variant = split
+        try:
+            rank = VARIANT_PREFERENCE.index(variant)
+        except ValueError:
+            rank = len(VARIANT_PREFERENCE)
+        prev = best.get(site)
+        if prev is None or rank < prev[0]:
+            best[site] = (rank, p)
+
+    chosen = {site: p for site, (_, p) in best.items()}
+    stats.n_files_skipped_variant = (
+        len(paths) - stats.n_files_skipped_noaa - len(chosen) - 0
+    )
+    return chosen
+
+
+NOAA_FIELDS = {
+    "Study_Name": "study_name",
+    "Investigators": "investigators",
+    "DOI": "doi",
+    "Site_Name": "site_name",
+    "Location": "location",
+    "Northernmost_Latitude": "lat",
+    "Easternmost_Longitude": "lon",
+    "Elevation": "elevation",
+    "Species_Name": "species_name",
+    "Common_Name": "common_name",
+    "Online_Resource": "url",
+    "Earliest_Year": "declared_first",
+    "Most_Recent_Year": "declared_last",
+}
+
+# How far the data may sit from the declared span before we call the file
+# relative-dated.  Declared years are often rounded to the nearest decade.
+DATING_TOLERANCE_YEARS = 100
+
+
+def read_noaa_header(path: str) -> dict:
+    """Parse the ``#``-commented NOAA template header for metadata."""
+    out: dict = {}
+    try:
+        with open(path, "rb") as fh:
+            blob = fh.read(20000)
+    except OSError:
+        return out
+    for raw in blob.decode("utf-8", errors="replace").splitlines():
+        if not raw.startswith("#"):
+            continue
+        line = raw.lstrip("#").strip()
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        field_name = NOAA_FIELDS.get(key.strip())
+        if not field_name or not value.strip():
+            continue
+        out.setdefault(field_name, value.strip())
+    for k in ("lat", "lon"):
+        if k in out:
+            try:
+                out[k] = float(out[k])
+            except ValueError:
+                out.pop(k)
+    return out
+
+
+def species_from_study_name(name: str) -> str:
+    """ITRDB study names embed the species code: '... - QURO - ITRDB GERM001'."""
+    m = re.search(r" - ([A-Z]{4}) - ITRDB", name or "")
+    return m.group(1) if m else ""
+
+
+def classify(species_code: str) -> tuple[str, str]:
+    """Return (genus, display group) for a 4-letter ITRDB species code."""
+    genus, common = GENUS.get((species_code or "")[:2].upper(), ("", ""))
+    if common in FOCUS_GROUPS:
+        return genus, common
+    return genus, common or "other"
+
+
+def build_logs(raw_dir: str | None = None, limit: int = 0):
+    """Parse the corpus into deduplicated Log records with metadata attached."""
+    raw_dir = raw_dir or config.path(config.RAW, "itrdb", "europe")
+    stats = CorpusStats()
+
+    paths = sorted(glob.glob(os.path.join(raw_dir, "*.rwl")))
+    stats.n_files_listed = len(paths)
+    chosen = select_files(paths, stats)
+
+    api_meta: dict[str, dict] = {}
+    meta_path = os.path.join(config.path(config.INTERIM), "study_metadata.json")
+    if os.path.exists(meta_path):
+        api_meta = json.load(open(meta_path)).get("by_file", {})
+
+    logs: list[Log] = []
+    for site in sorted(chosen) if not limit else sorted(chosen)[:limit]:
+        path = chosen[site]
+        name = os.path.basename(path)
+        result = parse_rwl(path)
+        if not result.series:
+            stats.n_files_empty += 1
+            stats.warnings.append(f"{name}: no series parsed")
+            continue
+        stats.n_files_used += 1
+        stats.warnings.extend(result.warnings)
+
+        # Prefer the NOAA-template sibling's header; fall back to the API.
+        meta = read_noaa_header(path.replace(".rwl", "-noaa.rwl"))
+        api = api_meta.get(name) or {}
+        # Only ~40% of files have a NOAA-template sibling, so fall back to the
+        # study API for the declared span; without one, dating is unverifiable.
+        if "declared_first" not in meta and api.get("earliest_year") is not None:
+            meta = dict(meta)
+            meta["declared_first"] = api.get("earliest_year")
+            meta["declared_last"] = api.get("recent_year")
+        study_name = meta.get("study_name") or api.get("study_name") or ""
+        code = species_from_study_name(study_name)
+        genus, group = classify(code)
+
+        variant = (split_site_variant(name) or (site, ""))[1]
+        dating = classify_dating(result.series, meta)
+
+        for s in result.series:
+            logs.append(
+                Log(
+                    key=f"{site}/{s.series_id}",
+                    site=site,
+                    series_id=s.series_id,
+                    first_year=s.first_year,
+                    last_year=s.last_year,
+                    n_measured=s.n_measured,
+                    values=s.values,
+                    variant=variant,
+                    species_code=code,
+                    species_name=meta.get("species_name", ""),
+                    common_name=meta.get("common_name", ""),
+                    genus=genus,
+                    group=group,
+                    site_name=meta.get("site_name") or api.get("site_name") or "",
+                    location=meta.get("location") or api.get("location") or "",
+                    lat=meta.get("lat", api.get("lat")),
+                    lon=meta.get("lon", api.get("lon")),
+                    elevation=str(meta.get("elevation", "")),
+                    investigators=meta.get("investigators")
+                    or api.get("investigators")
+                    or "",
+                    study_name=study_name,
+                    doi=meta.get("doi") or (api.get("doi") or ""),
+                    url=meta.get("url") or (api.get("url") or ""),
+                    dating=dating,
+                )
+            )
+        if dating == "floating":
+            stats.n_floating += 1
+
+    stats.n_logs = len(logs)
+    return logs, stats
+
+
+def declared_span_ce(meta: dict) -> tuple[int, int] | None:
+    """Read the declared span from a NOAA header, normalising BP to CE.
+
+    The header's units are not consistent across the archive: Late Glacial
+    studies declare years BP while the rest declare CE.  The reliable tell is
+    ordering - BP counts backwards, so ``Earliest_Year > Most_Recent_Year``
+    means the pair is BP (swit240 declares 15000..14000 BP = -13050..-12050 CE).
+    """
+    try:
+        first = int(float(meta["declared_first"]))
+        last = int(float(meta["declared_last"]))
+    except (KeyError, TypeError, ValueError):
+        return None
+    if first > last:
+        return 1950 - first, 1950 - last
+    return first, last
+
+
+def classify_dating(series: list[Series], meta: dict) -> str:
+    """Decide whether a collection's years are calendar dates or relative.
+
+    Rather than guess from the magnitude of the years, compare the data against
+    the span the archive declares for it.  The Swiss Late Glacial pines number
+    their rings from 1 while declaring a Late Glacial age, and that disagreement
+    is what identifies them.  Plotting such a log on a calendar axis would place
+    a 13,000 BC tree in the Roman period.
+    """
+    if not series:
+        return "unknown"
+    declared = declared_span_ce(meta)
+    if declared is None:
+        return "unverified"
+    parsed_first = min(s.first_year for s in series)
+    parsed_last = max(s.last_year for s in series)
+    if (
+        abs(parsed_first - declared[0]) > DATING_TOLERANCE_YEARS
+        or abs(parsed_last - declared[1]) > DATING_TOLERANCE_YEARS
+    ):
+        return "floating"
+    return "absolute"
