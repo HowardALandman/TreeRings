@@ -77,16 +77,24 @@ async function load() {
  * in the first row whose value clears its end year.  A linear scan would be
  * O(n * rows) - about 4 billion operations at this corpus size - so the tree
  * finds the leftmost qualifying row in O(log rows) instead. */
-function packRows(order) {
+/* Writes each log's row into `out`, which the caller sizes to the whole corpus.
+ *
+ * `out` must be indexed by global log index, not by position within `order`:
+ * a filtered `order` is short while its indices stay corpus-wide, and an
+ * out-of-bounds TypedArray write is silently discarded rather than throwing -
+ * which previously collapsed every filtered taxon onto row 0.
+ *
+ * Returns the number of rows used. */
+function packRows(order, out) {
   const n = order.length;
-  if (!n) return { rows: new Int32Array(0), count: 0 };
+  if (!n) return 0;
 
+  // At most one row per log, so `n` leaves always suffice.
   let size = 1;
   while (size < n) size <<= 1;
   const INF = 0x7fffffff;
   const tree = new Int32Array(2 * size).fill(INF);  // max over each subtree
 
-  const rows = new Int32Array(n);
   let used = 0;
 
   for (let k = 0; k < n; k++) {
@@ -97,12 +105,12 @@ function packRows(order) {
 
     // Descend to the leftmost leaf whose stored value exceeds `target`.
     let node = 1;
-    if (tree[node] <= target) return { rows, count: used, overflow: true };
+    if (tree[node] <= target) break;  // cannot happen: `size` >= n leaves
     while (node < size) {
       node = tree[2 * node] > target ? 2 * node : 2 * node + 1;
     }
     const row = node - size;
-    rows[li] = row;
+    out[li] = row;
     if (row + 1 > used) used = row + 1;
 
     // Publish the new leftmost year for that row.
@@ -113,7 +121,7 @@ function packRows(order) {
       tree[p] = v;
     }
   }
-  return { rows, count: used };
+  return used;
 }
 
 const ERAS = {
@@ -156,9 +164,7 @@ function repack() {
   const rows = new Int32Array(state.n);
   if (state.mode === 'unified') {
     const order = Array.from(state.visible).sort(sortByEndDesc);
-    const r = packRows(order);
-    for (const i of state.visible) rows[i] = r.rows[i];
-    state.rowCount = r.count;
+    state.rowCount = packRows(order, rows);
   } else {
     // Each taxon band packs independently, so a band's height reflects only
     // its own logs.
@@ -168,14 +174,42 @@ function repack() {
         .filter((i) => state.buf[i * F + GROUP] === g)
         .sort(sortByEndDesc);
       if (!order.length) continue;
-      const r = packRows(order);
-      for (const i of order) rows[i] = r.rows[i];
-      heights[g] = r.count;
+      heights[g] = packRows(order, rows);
     }
     state.bandHeights = heights;
     state.rowCount = bandTotal(heights);
   }
   state.rows = rows;
+  assertNoOverlap();
+}
+
+/* The build step proves the *precomputed* layouts are overlap-free, but this
+ * client-side repack only runs when a filter is active, so nothing covered it -
+ * which is where a silent out-of-bounds write once collapsed whole taxa onto a
+ * single row.  Checking here costs O(n log n) per filter change, not per frame. */
+function assertNoOverlap() {
+  const byRow = new Map();
+  for (const i of state.visible) {
+    const r = rowOf(i);
+    let list = byRow.get(r);
+    if (!list) byRow.set(r, (list = []));
+    list.push(i);
+  }
+  for (const [row, items] of byRow) {
+    items.sort((a, b) => state.buf[a * F + START] - state.buf[b * F + START]);
+    for (let k = 1; k < items.length; k++) {
+      const prevEnd = state.buf[items[k - 1] * F + END];
+      const start = state.buf[items[k] * F + START];
+      if (start - GAP <= prevEnd) {
+        console.error(
+          `packing violation in row ${row}: ${state.index.series_ids[items[k - 1]]} ` +
+          `ends ${prevEnd} but ${state.index.series_ids[items[k]]} starts ${start}`
+        );
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 function sortByEndDesc(a, b) {
