@@ -4,7 +4,7 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete.** Full pipeline runs end to end, 74,063 logs render in the
+**Status: M1 complete.** Full pipeline runs end to end, 76,529 logs render in the
 browser, parser cross-validates against dplR at 100%.
 
 ## The Hohenheim question
@@ -17,7 +17,7 @@ inference:
 |---|---|
 | ITRDB / NCEI | no Hohenheim study; only 14 measurement studies worldwide start before 3000 BC |
 | Zenodo, PANGAEA | nothing relevant |
-| DCCD | dead (DNS failure) |
+| DCCD | service down (2026-08-18: `dendro.dans.knaw.nl` resolves to 194.171.144.80 and completes a TLS handshake, then the request fails — the host is alive, so ask DANS whether the holdings survived) |
 | Billamboz German Neolithic oak (GERM021–031) | averaged `.crn` chronologies only, no per-log data |
 | Belfast Irish oak | in ITRDB only from 1531 CE |
 
@@ -46,9 +46,10 @@ Note the external drive's *root* is `root:wheel` and not writable by `howard`;
 ## What the numbers are
 
 - 5,623 `.rwl` files listed in ITRDB `measurements/europe/`
-- → 2,061 files after dedup, → **76,745 logs**, 74,063 plotted
-- 2,682 logs withheld as floating; 3,464 dated but unverifiable against metadata
-- Span 5407 BC – 2023 CE; 2,030 sites
+- → 2,061 files after dedup, → **76,745 logs**, 76,529 plotted
+- 216 logs withheld as floating; 23 plotted over a wrong declared span
+  (`disputed`); 3,464 dated but unverifiable against metadata
+- Span 5407 BC – 2023 CE; 2,054 sites
 
 ## Format traps, all found in real files
 
@@ -74,10 +75,17 @@ test in `tests/`.
 7. **NCEI's `Continent>Europe` filter is unusable.** Of 6,000 studies it returns,
    only 1,541 have European coordinates; it also omits genuine European studies.
    The `measurements/europe/` directory listing defines the corpus instead.
+8. **A declared span narrower than the data is normal, not a sign of relative
+   dating.** The declared span describes the site chronology, not the longest
+   log: fran10 declares 1943–1975 and measures 1747–1988. The first classifier
+   demanded endpoint agreement and so called 2,682 logs floating when only 216
+   are; overlap is the right test. See `tests/test_dating.py`.
 
 ## Verification
 
-- `pytest tests/` — 20 tests, fixtures are the files that broke earlier parsers.
+- `pytest tests/` — 40 tests: parser fixtures are the files that broke earlier
+  parsers; `test_dating.py` pins every real collection the classifier must
+  separate into absolute / floating / disputed.
 - `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,154
   series**, 0 disagreements, 0 invariant failures, 0 series found by dplR that
   we miss (we additionally read 11,591 series dplR cannot).
@@ -86,22 +94,44 @@ test in `tests/`.
 
 ## Shape of the data (drives the UI)
 
-The archive is overwhelmingly modern: 7 logs alive in 5000 BC, 80 at 1 CE,
-**60,313 in 1971**. Packed, that is a ~60,000-row wedge, so the viewer zooms on
+The archive is overwhelmingly modern: 7 logs alive in 5000 BC, 84 at 1 CE,
+**62,199 in 1971**. Packed, that is a ~62,000-row wedge, so the viewer zooms on
 both axes and offers era filters. The "Before 1 CE" + "Packed together" view is
 the classic overlapping-chronology ladder and the most legible entry point.
 
 ## Next
 
-- **Floating chronologies.** 2,682 logs (incl. the Swiss Late Glacial pines,
-  the oldest material available) are withheld because their rings number from 1.
-  Absolute offsets exist in prose/headers (swit195 carries `-12287`); wiring
-  those in would push the timeline back past 12,000 BP.
+- **Floating chronologies.** 216 logs across 7 collections are withheld because
+  their year column is ring ordinals: Kaiser's Daettnau pines (swit195–198, 41
+  logs), Schaub & Kaiser's Gaenziloo/Landikon (swit240, 95), and Bebchuk et
+  al.'s Fenland yews (brit099/brit100, 80). Absolute offsets exist outside the
+  files (swit195 declares `-12287`; Reinig et al. redated the Swiss Late Glacial
+  pines for IntCal20), so wiring those in would push the timeline past 12,000
+  BP. Contact: Frank Reinig (Mainz) / Ulf Büntgen (Cambridge).
 - **Taxon colour beyond 6 groups.** Only 3 hues can be distinguished at
   arbitrary adjacency; the by-taxon band layout is what makes 6 legal. Do not
   add hues without re-running the validator.
-- **Hosting.** Payload is 3.35 MB core plus lazy shards — static hosting
-  (GitHub Pages / Cloudflare Pages) is sufficient. Not yet set up.
+- **Hosting — next session's topic.** Payload is 3.44 MB core plus lazy shards
+  (2,054 per-site value shards), so static hosting (GitHub Pages / Cloudflare
+  Pages) is sufficient. Not yet set up.
 - **Metadata gaps.** 3,464 logs lack a declared span to check dating against.
+- **Report the metadata defects to `paleo@noaa.gov`** — draft written, not yet
+  sent — see `docs/ncei-metadata-report.md`. Re-checked live against the study
+  API on 2026-08-18:
+  - **BRIT101** (study 44081): the search record says `271 276`; the file's own
+    header says `271 726` and the data ends at 726. The file is right, and the
+    NOAA template sibling carries no year fields — the defect is in the search
+    database alone.
+  - **NETH005** (study 3626): declares −66…106, data measures 1834–2006 — off
+    by exactly 1900. Wrong in both the study record and `neth005-rwl-noaa.txt`
+    (which states `Time_Unit: AD`).
+  - **BRIT** (study 4225): declares 1750–1975, data measures 812–1458; wrong in
+    the record, the template, and the `.rwl` header. The file also mixes three
+    site codes (346 at 902–1203, 347 at 1131–1458, 348 at 812–1080) where the
+    header describes 346 only.
+- **Hohenheim per-log data → CEZA Mannheim.** The Hohenheim AG dissolved
+  2026-02-28; the collection (~3,000 boxes) is at the Curt-Engelhorn-Zentrum
+  Archäometrie, which is entering existing ring-width measurements into a
+  database. Contact Dr. Thorsten Westphal, `info@ceza.de`.
 - Local LLMs are unused so far; the natural fit is tidying multi-language site
   and investigator strings for display.

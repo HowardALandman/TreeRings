@@ -46,7 +46,11 @@ def main(argv: list[str] | None = None) -> int:
     # the Roman period, so they are held back and reported instead.
     plotted = [log for log in logs if log.dating != "floating"]
     floating = [log for log in logs if log.dating == "floating"]
+    disputed = [log for log in logs if log.dating == "disputed"]
     print(f"  {len(plotted)} plotted, {len(floating)} withheld as floating")
+    print(f"  {len(disputed)} plotted with a disputed declared span")
+    for site in sorted({log.site for log in disputed}):
+        print(f"    {site}")
 
     # Stable site index, so the buffer can refer to metadata by integer.
     sites = sorted({log.site for log in plotted})
@@ -137,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             "logs_total": len(logs),
             "logs_plotted": len(order),
             "logs_floating": len(floating),
+            "logs_disputed": len(disputed),
             "n_sites": len(sites),
             "warnings": len(stats.warnings),
         },

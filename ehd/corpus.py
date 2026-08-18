@@ -129,6 +129,7 @@ class CorpusStats:
     n_files_empty: int = 0
     n_logs: int = 0
     n_floating: int = 0
+    n_disputed: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -192,9 +193,18 @@ NOAA_FIELDS = {
     "Most_Recent_Year": "declared_last",
 }
 
-# How far the data may sit from the declared span before we call the file
-# relative-dated.  Declared years are often rounded to the nearest decade.
+# How far the data may sit outside the declared span before the two are judged
+# disjoint.  Declared years are often rounded to the nearest decade.
 DATING_TOLERANCE_YEARS = 100
+
+# The oldest absolutely dated collection the archive declares is swed334, at
+# 5407 BC.  A declared start older than this horizon marks subfossil material
+# whose calendar position, if it has one, was established outside the file - so
+# the file's own year column cannot be read as a calendar date.  -8000 leaves
+# ~2,600 years of margin below the oldest dated collection and ~4,300 years
+# above the Late Glacial declarations (swit195-198 at -12287, swit240 at
+# -13050) that the horizon exists to catch.
+PRE_ARCHIVE_HORIZON_CE = -8000
 
 
 def read_noaa_header(path: str) -> dict:
@@ -313,6 +323,14 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
             )
         if dating == "floating":
             stats.n_floating += 1
+        elif dating == "disputed":
+            stats.n_disputed += 1
+            stats.warnings.append(
+                f"{name}: declared span {declared_span_ce(meta)} does not meet "
+                f"measured span "
+                f"({min(s.first_year for s in result.series)}, "
+                f"{max(s.last_year for s in result.series)})"
+            )
 
     stats.n_logs = len(logs)
     return logs, stats
@@ -336,25 +354,63 @@ def declared_span_ce(meta: dict) -> tuple[int, int] | None:
     return first, last
 
 
-def classify_dating(series: list[Series], meta: dict) -> str:
-    """Decide whether a collection's years are calendar dates or relative.
+def declares_years_bp(meta: dict) -> bool:
+    """True when the declared span is written in years BP, which count backwards.
 
-    Rather than guess from the magnitude of the years, compare the data against
-    the span the archive declares for it.  The Swiss Late Glacial pines number
-    their rings from 1 while declaring a Late Glacial age, and that disagreement
-    is what identifies them.  Plotting such a log on a calendar axis would place
-    a 13,000 BC tree in the Roman period.
+    Only two collections in the European corpus do this (brit099 and brit100,
+    the Fenland yews), and both are floating - but the mark is the archive's
+    own, not a guess from magnitude, so it is read directly rather than
+    inferred.
+    """
+    try:
+        return int(float(meta["declared_first"])) > int(float(meta["declared_last"]))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def spans_overlap(
+    a: tuple[int, int], b: tuple[int, int], slack: int = DATING_TOLERANCE_YEARS
+) -> bool:
+    """True when two closed year intervals intersect, allowing ``slack`` at each end."""
+    return a[0] <= b[1] + slack and b[0] <= a[1] + slack
+
+
+def classify_dating(series: list[Series], meta: dict) -> str:
+    """Decide what a collection's year column means.
+
+    ``absolute``    the measured span and the declared span describe the same
+                    interval, so the years are calendar dates.
+    ``floating``    the year column is ring ordinals carrying no calendar
+                    position.  Drawing these on the time axis would put a
+                    13,000 BC pine in the Roman period.
+    ``disputed``    the two spans are disjoint, yet nothing marks the file as
+                    subfossil: the years still read as calendar dates and it is
+                    the archive's declared span that is wrong.  Plotted, and
+                    recorded as a warning for reporting upstream.
+    ``unverified``  no declared span to check against.
+    ``unknown``     no series.
+
+    An earlier version returned ``floating`` for *any* disagreement with the
+    declared span.  That conflated "the rings are numbered from 1" with "NCEI's
+    metadata is wrong", and the second case is much the more common: it
+    withheld 1,248 calendar-dated silver firs (fran10, declared 1943-1975,
+    measured 1747-1988) alongside the 136 genuinely floating Late Glacial logs.
+    Overlap replaces endpoint agreement because a declared span is routinely
+    narrower than the data - it describes the site chronology, not the longest
+    log - and being narrower is not evidence of relative numbering.
     """
     if not series:
         return "unknown"
     declared = declared_span_ce(meta)
     if declared is None:
         return "unverified"
-    parsed_first = min(s.first_year for s in series)
-    parsed_last = max(s.last_year for s in series)
-    if (
-        abs(parsed_first - declared[0]) > DATING_TOLERANCE_YEARS
-        or abs(parsed_last - declared[1]) > DATING_TOLERANCE_YEARS
-    ):
+    parsed = (min(s.first_year for s in series), max(s.last_year for s in series))
+    if spans_overlap(parsed, declared):
+        return "absolute"
+    # Disjoint: either the file is relative-numbered or the metadata is wrong.
+    # Two marks, both made by the archive rather than inferred from the data,
+    # say "subfossil, dated outside the file": a span declared in years BP, and
+    # a declared start older than any absolutely dated material in the archive.
+    if declares_years_bp(meta) or declared[0] < PRE_ARCHIVE_HORIZON_CE:
         return "floating"
-    return "absolute"
+    return "disputed"
