@@ -37,7 +37,7 @@ python -m ehd.validate   # cross-check parser against dplR + invariants
 cd web && python -m http.server 8777                 # then open localhost:8777
 ```
 
-Deploy (static, Cloudflare Pages project `ehd`, account `the Cloudflare account`):
+Deploy (static, Cloudflare Pages project `ehd`):
 
 ```bash
 npx wrangler@4.124.0 pages deploy web/ --project-name ehd --branch main
@@ -108,6 +108,12 @@ test in `tests/`.
 Live at **https://treerings.howardalandman.org** (Cloudflare Pages project `ehd`,
 also reachable at `ehd-612.pages.dev` — the bare `ehd` pages.dev name was taken).
 
+Source: **https://github.com/HowardALandman/TreeRings** (public, MIT). Push with
+the default `github.com` SSH host, which maps to the `HowardALandman` account;
+the `HAL-BFF` key is scoped to the `github-bff` alias and used only by
+`~/src/BFF/cubff`. Note this repo's branch is `main`, renamed from `master`
+when it was first pushed.
+
 Domain `howardalandman.org` registered 2026-08-19 at Cloudflare Registrar, 1-year
 term, auto-renew on, expires 2027-08-19. Cloudflare is both registrar and
 authoritative DNS, so `treerings` is a CNAME it manages itself and Universal SSL
@@ -164,6 +170,10 @@ the classic overlapping-chronology ladder and the most legible entry point.
 - **Hohenheim per-log data → CEZA Mannheim.** The Hohenheim AG dissolved
   2026-02-28; the collection (~3,000 boxes) is at the Curt-Engelhorn-Zentrum
   Archäometrie, which is entering existing ring-width measurements into a
-  database. Contact Dr. Thorsten Westphal, `info@ceza.de`.
+  database. Contact Dr. Thorsten Westphal via the institute's general address,
+  `info@ceza.de`. The institute rebranded from `cez-archaeometrie.de` to
+  `ceza.de` (the old domain 301-redirects); both still share MX and A records,
+  so older personal addresses on the old domain likely still route, but the
+  general address is the one to use.
 - Local LLMs are unused so far; the natural fit is tidying multi-language site
   and investigator strings for display.
