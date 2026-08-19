@@ -13,3 +13,6 @@ __pycache__/
 /web/data/
 
 .DS_Store
+
+# Wrangler's local state/cache from `npx wrangler pages deploy`.
+.wrangler/

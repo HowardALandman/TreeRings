@@ -37,6 +37,17 @@ python -m ehd.validate   # cross-check parser against dplR + invariants
 cd web && python -m http.server 8777                 # then open localhost:8777
 ```
 
+Deploy (static, Cloudflare Pages project `ehd`, account `the Cloudflare account`):
+
+```bash
+npx wrangler@4.124.0 pages deploy web/ --project-name ehd --branch main
+```
+
+`wrangler` is not installed and not on PATH; it runs via `npx`. The OAuth token
+holds only `account:read`, `user:read`, `pages:write` and is stored encrypted with
+the key in the macOS Keychain (`wrangler login --use-keyring`). `web/_headers`
+carries the cache policy — read the comment in it before lengthening any max-age.
+
 Data root resolves to `$EHD_DATA`, else `/Volumes/Expansion/EHD`, else `./data`.
 Note the external drive's *root* is `root:wheel` and not writable by `howard`;
 `/Volumes/Expansion/EHD` had to be created once with sudo.
@@ -92,6 +103,23 @@ test in `tests/`.
 - `ehd.emit` asserts the packing is overlap-free before writing.
 - Palette validated with the dataviz skill's checker in both light and dark.
 
+## Hosting
+
+Live at **https://treerings.howardalandman.org** (Cloudflare Pages project `ehd`,
+also reachable at `ehd-612.pages.dev` — the bare `ehd` pages.dev name was taken).
+
+Domain `howardalandman.org` registered 2026-08-19 at Cloudflare Registrar, 1-year
+term, auto-renew on, expires 2027-08-19. Cloudflare is both registrar and
+authoritative DNS, so `treerings` is a CNAME it manages itself and Universal SSL
+already covered `*.howardalandman.org`. The apex is deliberately unrouted, reserved
+for an umbrella landing page; further projects go on their own subdomains rather
+than subpaths, so each keeps an independent deploy and file budget.
+
+Verified post-deploy: all 7 fetch paths 200, http→https 301, `_headers` applied
+(`no-cache` + nosniff/Referrer-Policy/X-Frame-Options), gzip on everything except
+`logs.bin` (see Next), 76,529 logs render, lazy shard fetch draws the sparkline,
+browser console clean.
+
 ## Shape of the data (drives the UI)
 
 The archive is overwhelmingly modern: 7 logs alive in 5000 BC, 84 at 1 CE,
@@ -111,12 +139,16 @@ the classic overlapping-chronology ladder and the most legible entry point.
 - **Taxon colour beyond 6 groups.** Only 3 hues can be distinguished at
   arbitrary adjacency; the by-taxon band layout is what makes 6 legal. Do not
   add hues without re-running the validator.
-- **Hosting — next session's topic.** Payload is 3.44 MB core plus lazy shards
-  (2,054 per-site value shards), so static hosting (GitHub Pages / Cloudflare
-  Pages) is sufficient. Not yet set up.
+- **`logs.bin` ships uncompressed.** Cloudflare's auto-compression works from a
+  content-type allowlist that excludes `application/octet-stream`, so the 1.84 MB
+  binary is served raw where it would gzip to ~607 KB — every first visit pays
+  ~1.2 MB extra. Neither fix is free: overriding the declared content-type to
+  something on the allowlist works but is semantically false, and pre-compressing
+  needs a `DecompressionStream` in `app.js`. Unresolved.
 - **Metadata gaps.** 3,464 logs lack a declared span to check dating against.
-- **Report the metadata defects to `paleo@noaa.gov`** — draft written, not yet
-  sent — see `docs/ncei-metadata-report.md`. Re-checked live against the study
+- **Metadata defects reported to `paleo@noaa.gov`** — sent 2026-08-19 (Howard
+  edited and added to the draft before sending); awaiting reply. See
+  `docs/ncei-metadata-report.md`. Re-checked live against the study
   API on 2026-08-18:
   - **BRIT101** (study 44081): the search record says `271 276`; the file's own
     header says `271 726` and the data ends at 726. The file is right, and the

@@ -1,0 +1,26 @@
+# Cloudflare Pages response headers.
+#
+# Cache policy note: ehd.emit writes stable filenames (index.json, logs.bin,
+# values/{site}.json) and overwrites them in place -- there is no content hash
+# or version in any path.  A long max-age or `immutable` would therefore pin
+# stale ring-width data in visitors' browsers across a pipeline rerun, which
+# Cloudflare's edge purge does not fix.  `no-cache` stores the response but
+# forces revalidation; Pages emits ETags, so the common case is a 304 with an
+# empty body, not a refetch.
+#
+# If the extra round-trip ever matters, the fix is to version the payload path
+# (data/v1/...) in emit.py + app.js, and only then switch to immutable.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+
+/data/*
+  Cache-Control: no-cache
+
+/app.js
+  Cache-Control: no-cache
+
+/style.css
+  Cache-Control: no-cache
