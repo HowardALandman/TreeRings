@@ -142,15 +142,49 @@ the classic overlapping-chronology ladder and the most legible entry point.
   files (swit195 declares `-12287`; Reinig et al. redated the Swiss Late Glacial
   pines for IntCal20), so wiring those in would push the timeline past 12,000
   BP. Contact: Frank Reinig (Mainz) / Ulf Büntgen (Cambridge).
+- **App title is hardcoded to Europe.** `web/index.html` and `web/app.js` both
+  say "European Tree-Ring Archive". Accurate today, wrong the moment a
+  non-European corpus lands. Make it follow the corpus when the ITRDB region is
+  parameterised (currently hardcoded in `ehd/config.py` `ITRDB_EUROPE` and
+  `ehd/fetch.py` `list_europe_files`). The other seven ITRDB regional directories
+  are `africa`, `asia`, `atlantic`, `australia`, `centralamerica`, `northamerica`,
+  `southamerica`; everything downstream of the fetch is already region-agnostic.
+
 - **Taxon colour beyond 6 groups.** Only 3 hues can be distinguished at
   arbitrary adjacency; the by-taxon band layout is what makes 6 legal. Do not
   add hues without re-running the validator.
-- **`logs.bin` ships uncompressed.** Cloudflare's auto-compression works from a
-  content-type allowlist that excludes `application/octet-stream`, so the 1.84 MB
-  binary is served raw where it would gzip to ~607 KB — every first visit pays
-  ~1.2 MB extra. Neither fix is free: overriding the declared content-type to
-  something on the allowlist works but is semantically false, and pre-compressing
-  needs a `DecompressionStream` in `app.js`. Unresolved.
+- **`logs.bin` ships uncompressed — next session's task.** Cloudflare's
+  auto-compression works from a content-type allowlist that excludes
+  `application/octet-stream`, so the file is served raw. Measured 2026-08-20:
+
+  | | bytes | vs raw |
+  |---|---:|---|
+  | raw | 1,836,696 | — |
+  | gzip -9 | 621,169 | 2.96x |
+  | brotli -11 | 413,182 | 4.45x |
+
+  First load today is **2.09 MiB**, of which `logs.bin` is 84%. With brotli -11 it
+  becomes **0.73 MiB — 65% smaller**.
+
+  Note Cloudflare's *on-the-fly* brotli is tuned for speed, not ratio: it returns
+  `index.json` at 345,660 B where gzip -9 gives 336,872 B. So the 65% figure only
+  holds if the file is pre-compressed at build time; merely getting Cloudflare to
+  compress it lands nearer the gzip tier (~600 KB, ~0.92 MiB total).
+
+  Three routes:
+  - **A.** Declare a content-type on the allowlist. No build change, but the type
+    would be false, and it only reaches the ~600 KB tier.
+  - **B (recommended).** Pre-compress with `brotli -q 11` in `ehd.emit`, serve with
+    `Content-Encoding: br` from `web/_headers`. Full 413 KB, and **no `app.js`
+    change** — `Content-Encoding` is handled at the HTTP layer, so `arrayBuffer()`
+    still sees the original bytes. Cost: a hard dependency on the client sending
+    `Accept-Encoding: br` (universal in browsers over HTTPS since ~2017) rather
+    than true content negotiation.
+  - **C.** Pre-compress plus an explicit `DecompressionStream` in `app.js`. Same
+    413 KB, immune to what the client negotiates, at the cost of decode code.
+
+  Whichever is chosen, re-verify the served size after deploying — the local
+  compression ratio is not what Cloudflare necessarily serves.
 - **Metadata gaps.** 3,464 logs lack a declared span to check dating against.
 - **Metadata defects reported to `paleo@noaa.gov`** — sent 2026-08-19 (Howard
   edited and added to the draft before sending); awaiting reply. See
