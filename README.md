@@ -1,4 +1,4 @@
-# EHD — European Tree-Ring Archive
+# TreeRings
 
 **[treerings.howardalandman.org](https://treerings.howardalandman.org)**
 
@@ -6,8 +6,9 @@ An interactive view of individual subfossil and historical tree logs on a shared
 time axis. One rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**76,529 logs · 2,054 sites · 5407 BC – 2023 CE**, built from the public ITRDB
-European measurement corpus.
+The corpus currently loaded is the ITRDB European measurement set —
+**76,529 logs · 2,054 sites · 5407 BC – 2023 CE**. Europe is where this started,
+not the limit of what it handles; see [Scope](#scope).
 
 Most tree-ring resources publish *site chronologies* — averaged curves. This
 shows the underlying logs individually, which is what makes the overlapping
@@ -21,6 +22,24 @@ The corpus is overwhelmingly modern: 7 logs alive in 5000 BC, 84 at 1 CE, and
 on both axes and offers era filters. The **"Before 1 CE" + "Packed together"**
 view is the classic overlapping-chronology ladder, and the most legible entry
 point.
+
+## Scope
+
+ITRDB publishes measurements under regional directories: `africa`, `asia`,
+`atlantic`, `australia`, `centralamerica`, `europe`, `northamerica`, and
+`southamerica`. This project reads `europe` today.
+
+Nothing downstream of the fetch is Europe-specific. The `.rwl` parser, the
+duplicate reconciliation, the dating classifier, the packing, and the viewer all
+operate on logs without reference to region. Adding another regional corpus is a
+matter of parameterising the region — it is currently hardcoded in
+`ehd/config.py` (`ITRDB_EUROPE`) and `ehd/fetch.py` (`list_europe_files`,
+and the `raw/itrdb/europe` destination) — plus deciding how the viewer should
+present a corpus large enough that a single packed timeline stops being legible.
+
+The pipeline is also source-agnostic beyond ITRDB: any per-log corpus that can be
+expressed as series with ring widths and a dating status drops in as another
+input.
 
 ## Running the pipeline
 
