@@ -5,6 +5,14 @@ would be tens of megabytes and slow to parse; metadata that the viewer only
 needs on hover or click stays in JSON, and per-log ring widths are sharded by
 site so a click fetches ~30 KB instead of ~60 MB.
 
+The two files first paint waits on -- logs.bin and index.json -- are written
+brotli-compressed under their plain names and served with `Content-Encoding:
+br`; see ehd/compress.py for why, and web/_headers for the rule.  They are
+therefore not readable with `cat`, and a plain static file server will not
+serve them correctly -- use `python scripts/serve.py` for local viewing.  The
+values/ shards are left uncompressed: Cloudflare compresses application/json on
+the fly, and 2,056 files at quality 11 is not worth the build time.
+
 Usage:
     python -m ehd.emit
 """
@@ -16,7 +24,7 @@ import json
 import os
 import sys
 
-from . import config, corpus, pack
+from . import compress, config, corpus, pack
 
 # Band order on screen.  This is also the categorical colour order, chosen so
 # that the three warm hues are never adjacent - see the palette validation in
@@ -36,6 +44,18 @@ def main(argv: list[str] | None = None) -> int:
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "data"
     )
     os.makedirs(os.path.join(web_data, "values"), exist_ok=True)
+
+    # Check this before the corpus build rather than after it: the build takes
+    # minutes, and a missing compressor is a one-line fix.
+    backend = compress.backend()
+    if backend is None:
+        print(
+            "no brotli available: `uv pip install brotli`, or install the "
+            "brotli command-line tool (`brew install brotli`)",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"compressing payloads with {backend} -q{compress.QUALITY}")
 
     print("building corpus...")
     logs, stats = corpus.build_logs()
@@ -91,8 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     bin_path = os.path.join(web_data, "logs.bin")
-    with open(bin_path, "wb") as fh:
-        buf.tofile(fh)
+    bin_raw, bin_br = compress.write(bin_path, buf.tobytes())
 
     # --- metadata ------------------------------------------------------------
     by_site: dict[str, corpus.Log] = {}
@@ -146,8 +165,10 @@ def main(argv: list[str] | None = None) -> int:
             "warnings": len(stats.warnings),
         },
     }
-    with open(os.path.join(web_data, "index.json"), "w") as fh:
-        json.dump(index, fh, separators=(",", ":"))
+    index_path = os.path.join(web_data, "index.json")
+    index_raw, index_br = compress.write(
+        index_path, json.dumps(index, separators=(",", ":")).encode()
+    )
 
     # --- ring widths, sharded by site ---------------------------------------
     shards: dict[str, dict[str, list]] = {}
@@ -160,14 +181,13 @@ def main(argv: list[str] | None = None) -> int:
         with open(os.path.join(web_data, "values", f"{site}.json"), "w") as fh:
             json.dump(payload, fh, separators=(",", ":"))
 
-    total = os.path.getsize(bin_path) + os.path.getsize(
-        os.path.join(web_data, "index.json")
-    )
     print(f"\nwrote {web_data}")
-    print(f"  logs.bin    {os.path.getsize(bin_path) / 1e6:.2f} MB")
-    print(f"  index.json  {os.path.getsize(os.path.join(web_data, 'index.json')) / 1e6:.2f} MB")
-    print(f"  values/     {len(shards)} shards")
-    print(f"  core payload {total / 1e6:.2f} MB")
+    print(f"  logs.bin    {bin_br / 1e6:.2f} MB br  ({bin_raw / 1e6:.2f} MB raw,"
+          f" {bin_raw / bin_br:.2f}x)")
+    print(f"  index.json  {index_br / 1e6:.2f} MB br  ({index_raw / 1e6:.2f} MB raw,"
+          f" {index_raw / index_br:.2f}x)")
+    print(f"  values/     {len(shards)} shards, uncompressed")
+    print(f"  first paint {(bin_br + index_br) / 1e6:.2f} MB over the wire")
     return 0
 
 

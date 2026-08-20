@@ -29,13 +29,20 @@ per-log corpus drops in as another input.
 ## Running it
 
 ```bash
-uv venv --python 3.12 && uv pip install pytest      # once
+uv venv --python 3.12 && uv pip install pytest brotli   # once
 python -m ehd.fetch      # download corpus (~5,600 files) to the data root
 python -m ehd.harvest    # study metadata + corpus reconciliation report
 python -m ehd.emit       # build web/data payloads
 python -m ehd.validate   # cross-check parser against dplR + invariants
-cd web && python -m http.server 8777                 # then open localhost:8777
+python scripts/serve.py                              # then open localhost:8777
 ```
+
+Use `scripts/serve.py`, not `python -m http.server`: `ehd.emit` writes
+`logs.bin` and `index.json` brotli-compressed under their plain names, and
+`web/_headers` is what declares that to the browser. The dev server reads the
+same `_headers` file, so local behaviour matches the deployed site; a plain
+static server serves the compressed bytes undeclared and the viewer draws
+nothing.
 
 Deploy (static, Cloudflare Pages project `ehd`):
 
@@ -94,7 +101,7 @@ test in `tests/`.
 
 ## Verification
 
-- `pytest tests/` — 40 tests: parser fixtures are the files that broke earlier
+- `pytest tests/` — 45 tests: parser fixtures are the files that broke earlier
   parsers; `test_dating.py` pins every real collection the classifier must
   separate into absolute / floating / disputed.
 - `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,154
@@ -121,10 +128,95 @@ already covered `*.howardalandman.org`. The apex is deliberately unrouted, reser
 for an umbrella landing page; further projects go on their own subdomains rather
 than subpaths, so each keeps an independent deploy and file budget.
 
-Verified post-deploy: all 7 fetch paths 200, http→https 301, `_headers` applied
-(`no-cache` + nosniff/Referrer-Policy/X-Frame-Options), gzip on everything except
-`logs.bin` (see Next), 76,529 logs render, lazy shard fetch draws the sparkline,
-browser console clean.
+Verified post-deploy (2026-08-20, after the compression change): all 7 fetch
+paths 200, http→https 301, security headers applied
+(nosniff/Referrer-Policy/X-Frame-Options), both payloads decode to the right
+byte counts, 76,529 logs render, lazy shard fetch draws the sparkline, browser
+console clean.
+
+**The edge cache serves the previous deploy for a while.** The first check after
+deploying showed the *old* `logs.bin` — 1,836,696 B, no `Content-Encoding`,
+`cf-cache-status: HIT`. Nothing was wrong: the object was still cached from the
+deploy before. A request with a cache-busting query string pulled the new one
+and the cached entry refreshed. When verifying a deploy, append `?cb=$RANDOM` or
+check the deployment-specific `<hash>.ehd-612.pages.dev` URL, or you will
+measure the thing you just replaced and believe the deploy failed.
+
+**`no-cache` does not survive on the custom domain.** Measured 2026-08-20 --
+`web/_headers` sets `no-cache` on `/data/*`, `/app.js` and `/style.css`, and
+that is what `ehd-612.pages.dev` and the deployment URLs return. On
+`treerings.howardalandman.org` it comes back as `max-age=14400` instead. The
+split is by file extension, which is Cloudflare's default cacheable-extension
+list acting on the zone in front of the custom domain:
+
+| | Cache-Control served | cf-cache-status |
+|---|---|---|
+| `logs.bin`, `app.js`, `style.css`, `favicon.ico` | `max-age=14400` | REVALIDATED |
+| `index.json`, `values/*.json`, `/` | `no-cache` | DYNAMIC |
+
+So the cache policy the `_headers` comment describes is only half in force, and
+the half that is missing is the half it was written for. A pipeline rerun can
+leave a visitor with a fresh `index.json` and a 4-hour-stale `logs.bin` --
+mismatched halves of one dataset. That used to draw silently wrong rectangles;
+`app.js`'s byte-length check now turns it into a visible error instead, but the
+error is the symptom, not the fix.
+
+Three ways to actually fix it, none applied yet -- all need dashboard access the
+deploy token does not have (`account:read`, `user:read`, `pages:write` only):
+
+- a Cache Rule on the zone for `treerings.howardalandman.org/*` set to respect
+  origin `Cache-Control`;
+- zone Browser Cache TTL set to "Respect Existing Headers";
+- version the payload path (`data/v1/...`) in `emit.py` + `app.js`, which the
+  `_headers` comment already proposes and which makes long caching correct
+  rather than merely tolerated.
+
+Note this is independent of the compression work -- it predates it and applies
+to `app.js` and `style.css` equally. It was not caught earlier because the
+original post-deploy check did not compare the custom domain against pages.dev.
+
+## Payload compression
+
+`ehd.emit` writes `logs.bin` and `index.json` brotli-compressed at quality 11
+under their plain names; `web/_headers` declares `Content-Encoding: br` on those
+two paths. The `values/` shards stay uncompressed for Cloudflare to handle.
+
+Measured live, 2026-08-20, before and after the change, over the same five
+first-paint requests with `Accept-Encoding: br, gzip, deflate`:
+
+| | before | after |
+|---|---:|---:|
+| `logs.bin` | 1,836,696 | 413,182 |
+| `index.json` | 345,660 | 254,711 |
+| `/`, `app.js`, `style.css` | 10,113 | 10,841 |
+| **first load** | **2,192,469 (2.09 MiB)** | **678,734 (0.65 MiB)** |
+
+69% smaller, on the live custom domain. `logs.bin` was 84% of first load and
+Cloudflare never touched it:
+the edge's auto-compression works from a content-type allowlist that excludes
+`application/octet-stream`. `index.json` *was* compressed, but the edge's
+on-the-fly brotli is tuned for speed rather than ratio (345,660 B against
+254,711 B for `brotli -q 11`), so pre-compressing it wins another 91 KB.
+
+Two things about this were expected to be problems and are not:
+
+- **Content negotiation still works.** The worry was that pre-compressing forces
+  brotli on every client. It does not: measured live, a request with
+  `Accept-Encoding: gzip` gets `index.json` re-encoded as gzip (336,872 B) and
+  `logs.bin` decompressed to its raw 1,836,696 B, and a request with no
+  `Accept-Encoding` gets both raw. Cloudflare decodes and re-encodes at the edge.
+- **`application/json` is on the auto-compress allowlist**, so pre-compressing
+  `index.json` risked being re-encoded on top of itself. It is not — the br bytes
+  pass through byte-identical to what `emit` wrote.
+
+`DecompressionStream('brotli')` is **not** an option for a client-side decode
+path: unsupported in Chrome as of 2026-08 (Firefox 147, Safari 18.4 only). Any
+explicit-decode design would be stuck at the gzip tier, ~621 KB for `logs.bin`.
+
+The compression and the `_headers` rule are two halves of one thing and break
+the site if separated, so `tests/test_headers.py` pins them together and
+`app.js` checks `logs.bin`'s byte length against `n_logs` and reports the likely
+cause on screen if it ever mismatches.
 
 ## Shape of the data (drives the UI)
 
@@ -153,38 +245,6 @@ the classic overlapping-chronology ladder and the most legible entry point.
 - **Taxon colour beyond 6 groups.** Only 3 hues can be distinguished at
   arbitrary adjacency; the by-taxon band layout is what makes 6 legal. Do not
   add hues without re-running the validator.
-- **`logs.bin` ships uncompressed — next session's task.** Cloudflare's
-  auto-compression works from a content-type allowlist that excludes
-  `application/octet-stream`, so the file is served raw. Measured 2026-08-20:
-
-  | | bytes | vs raw |
-  |---|---:|---|
-  | raw | 1,836,696 | — |
-  | gzip -9 | 621,169 | 2.96x |
-  | brotli -11 | 413,182 | 4.45x |
-
-  First load today is **2.09 MiB**, of which `logs.bin` is 84%. With brotli -11 it
-  becomes **0.73 MiB — 65% smaller**.
-
-  Note Cloudflare's *on-the-fly* brotli is tuned for speed, not ratio: it returns
-  `index.json` at 345,660 B where gzip -9 gives 336,872 B. So the 65% figure only
-  holds if the file is pre-compressed at build time; merely getting Cloudflare to
-  compress it lands nearer the gzip tier (~600 KB, ~0.92 MiB total).
-
-  Three routes:
-  - **A.** Declare a content-type on the allowlist. No build change, but the type
-    would be false, and it only reaches the ~600 KB tier.
-  - **B (recommended).** Pre-compress with `brotli -q 11` in `ehd.emit`, serve with
-    `Content-Encoding: br` from `web/_headers`. Full 413 KB, and **no `app.js`
-    change** — `Content-Encoding` is handled at the HTTP layer, so `arrayBuffer()`
-    still sees the original bytes. Cost: a hard dependency on the client sending
-    `Accept-Encoding: br` (universal in browsers over HTTPS since ~2017) rather
-    than true content negotiation.
-  - **C.** Pre-compress plus an explicit `DecompressionStream` in `app.js`. Same
-    413 KB, immune to what the client negotiates, at the cost of decode code.
-
-  Whichever is chosen, re-verify the served size after deploying — the local
-  compression ratio is not what Cloudflare necessarily serves.
 - **Metadata gaps.** 3,464 logs lack a declared span to check dating against.
 - **Metadata defects reported to `paleo@noaa.gov`** — sent 2026-08-19 (Howard
   edited and added to the draft before sending); awaiting reply. See

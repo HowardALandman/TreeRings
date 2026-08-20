@@ -24,3 +24,28 @@
 
 /style.css
   Cache-Control: no-cache
+
+# ehd.emit writes logs.bin and index.json brotli-compressed at quality 11 --
+# Cloudflare's content-type allowlist excludes application/octet-stream, so
+# logs.bin shipped raw (84% of first load), and where the edge does compress it
+# is tuned for speed: it returns index.json at 345,660 B where `brotli -q 11`
+# gets 254,711 B.  Declaring the encoding here is what makes those bytes
+# legible to the browser, so these two rules and the compression in emit.py
+# have to be changed together -- dropping either one serves brotli as raw
+# geometry and the viewer draws nothing.
+#
+# This does not cost content negotiation, which was the expected objection.
+# Measured live 2026-08-20: a client sending `Accept-Encoding: gzip` gets
+# index.json re-encoded as gzip (336,872 B) and logs.bin decompressed to its
+# raw 1,836,696 B, and a client sending no `Accept-Encoding` gets both raw.
+# Cloudflare decodes and re-encodes at the edge, so pre-compressing only
+# changes what a br-capable client receives.
+#
+# app.js checks logs.bin's byte length against n_logs and fails loudly if this
+# rule ever stops being applied.
+
+/data/logs.bin
+  Content-Encoding: br
+
+/data/index.json
+  Content-Encoding: br

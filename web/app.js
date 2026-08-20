@@ -42,12 +42,34 @@ const ctx = canvas.getContext('2d', { alpha: false });
 
 /* ------------------------------------------------------------------ load */
 
+// Both first-paint payloads ship brotli-compressed under their plain names,
+// with `Content-Encoding: br` from web/_headers as the only thing that tells
+// the browser so.  If that header is ever dropped, index.json arrives as
+// unparseable bytes and logs.bin as garbage geometry -- the latter silently,
+// because a brotli stream is a perfectly valid ArrayBuffer.  Both are caught
+// and named here, so the cause is on screen instead of a blank canvas.
+const ENCODING_HINT =
+  'data/index.json and data/logs.bin are served brotli-compressed; check that ' +
+  'Content-Encoding: br is being applied.';
+
 async function load() {
   const [index, binBuf] = await Promise.all([
-    fetch('data/index.json').then((r) => r.json()),
+    fetch('data/index.json')
+      .then((r) => r.json())
+      .catch((err) => {
+        throw new Error(`data/index.json did not parse (${err}). ${ENCODING_HINT}`);
+      }),
     fetch('data/logs.bin').then((r) => r.arrayBuffer()),
   ]);
   state.index = index;
+
+  const expected = index.n_logs * F * 4;
+  if (binBuf.byteLength !== expected) {
+    throw new Error(
+      `data/logs.bin is ${binBuf.byteLength} bytes, expected ${expected} ` +
+      `(${index.n_logs} logs x ${F} fields x 4). ${ENCODING_HINT}`
+    );
+  }
   state.buf = new Int32Array(binBuf);
   state.n = index.n_logs;
   index.groups.forEach((g) => state.enabled.add(g));

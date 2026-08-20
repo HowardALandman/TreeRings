@@ -44,13 +44,19 @@ input.
 ## Running the pipeline
 
 ```bash
-uv venv --python 3.12 && uv pip install pytest   # once
+uv venv --python 3.12 && uv pip install pytest brotli   # once
 python -m ehd.fetch      # download corpus (~5,600 files) to the data root
 python -m ehd.harvest    # study metadata + corpus reconciliation report
 python -m ehd.emit       # build web/data payloads
 python -m ehd.validate   # cross-check parser against dplR + invariants
-cd web && python -m http.server 8777
+python scripts/serve.py  # view at localhost:8777
 ```
+
+`scripts/serve.py` rather than `python -m http.server`, because `ehd.emit`
+writes the two first-paint payloads brotli-compressed under their plain names
+and `web/_headers` is what declares that to the browser; the dev server reads
+the same file, so local and deployed behaviour match. A plain static server
+hands the viewer compressed bytes and it draws nothing.
 
 Data root resolves to `$EHD_DATA`, else `/Volumes/Expansion/EHD`, else `./data`.
 `ehd.validate` additionally needs R with [dplR](https://github.com/AndyBunn/dplR).
@@ -81,12 +87,30 @@ regression test in `tests/`:
 
 Verification:
 
-- `pytest tests/` — 40 tests; the parser fixtures are the files that broke
+- `pytest tests/` — 45 tests; the parser fixtures are the files that broke
   earlier parsers.
 - `python -m ehd.validate` — **100.0000% span agreement with dplR across 65,154
   series**, 0 disagreements, 0 invariant failures, and 0 series found by dplR
   that this parser misses. It additionally reads 11,591 series dplR cannot.
 - `ehd.emit` asserts the packing is overlap-free before writing.
+
+## Payload size
+
+The two files first paint waits on are written brotli-compressed at quality 11
+and served with `Content-Encoding: br`. `logs.bin` is `application/octet-stream`,
+which Cloudflare's auto-compression allowlist excludes, so it shipped raw at 84%
+of first load; `index.json` was compressed, but by an edge encoder tuned for
+speed rather than ratio. Pre-compressing both takes first load from 2,192,561 to
+678,710 bytes — 2.09 MiB to 0.64 MiB, 69% smaller — measured live rather than
+locally, since the ratio a CDN serves is not the ratio a build produces.
+
+Clients that do not accept brotli are not stranded: Cloudflare decodes and
+re-encodes at the edge, so an `Accept-Encoding: gzip` request still gets gzip and
+one with no `Accept-Encoding` gets the raw bytes.
+
+The compression and the `_headers` rule break the site if separated, so
+`tests/test_headers.py` pins them together and `app.js` checks `logs.bin`'s
+length against `n_logs` and names the likely cause if it ever mismatches.
 
 ## Dating status
 
