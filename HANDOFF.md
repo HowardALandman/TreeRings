@@ -142,38 +142,87 @@ and the cached entry refreshed. When verifying a deploy, append `?cb=$RANDOM` or
 check the deployment-specific `<hash>.ehd-612.pages.dev` URL, or you will
 measure the thing you just replaced and believe the deploy failed.
 
-**`no-cache` does not survive on the custom domain.** Measured 2026-08-20 --
-`web/_headers` sets `no-cache` on `/data/*`, `/app.js` and `/style.css`, and
-that is what `ehd-612.pages.dev` and the deployment URLs return. On
-`treerings.howardalandman.org` it comes back as `max-age=14400` instead. The
-split is by file extension, which is Cloudflare's default cacheable-extension
-list acting on the zone in front of the custom domain:
+**`no-cache` did not survive on the custom domain — found and fixed 2026-08-20.**
+`web/_headers` sets `no-cache` on `/data/*`, `/app.js` and `/style.css`, and that
+is what `ehd-612.pages.dev` and the deployment URLs returned. On
+`treerings.howardalandman.org` it came back as `max-age=14400` instead.
+
+The mechanism is the zone's **Browser Cache TTL**, still on Cloudflare's 4-hour
+default (14400 s exactly). Per Cloudflare's docs it "overrides any Cache-Control
+or Expires headers" whose value "is less than the Browser Cache TTL setting" --
+and `no-cache` is less than four hours, so every asset the edge considers
+cacheable gets rewritten. Confirmed rather than inferred: the rewrite happens
+even on `cf-cache-status: MISS`, and the same asset fetched from
+`ehd-612.pages.dev`, with no zone in front, still says `no-cache`.
+
+What escapes it is what the edge does not cache at all -- `.json` and HTML come
+back `DYNAMIC` and keep their headers; the cacheable extensions do not:
 
 | | Cache-Control served | cf-cache-status |
 |---|---|---|
 | `logs.bin`, `app.js`, `style.css`, `favicon.ico` | `max-age=14400` | REVALIDATED |
 | `index.json`, `values/*.json`, `/` | `no-cache` | DYNAMIC |
 
-So the cache policy the `_headers` comment describes is only half in force, and
-the half that is missing is the half it was written for. A pipeline rerun can
-leave a visitor with a fresh `index.json` and a 4-hour-stale `logs.bin` --
-mismatched halves of one dataset. That used to draw silently wrong rectangles;
-`app.js`'s byte-length check now turns it into a visible error instead, but the
-error is the symptom, not the fix.
+So the cache policy the `_headers` comment describes was only half in force, and
+the missing half was the half it was written for. A pipeline rerun could leave a
+visitor with a fresh `index.json` and a 4-hour-stale `logs.bin` -- mismatched
+halves of one dataset, which would have drawn silently wrong rectangles.
+`app.js`'s byte-length check would now turn that into a visible error, but the
+error is the symptom; the setting below is the fix.
 
-Three ways to actually fix it, none applied yet -- all need dashboard access the
-deploy token does not have (`account:read`, `user:read`, `pages:write` only):
+**The fix, applied by Howard 2026-08-20:** Cloudflare dashboard → the
+`howardalandman.org` zone → Caching → Configuration → Browser Cache TTL →
+**Respect Existing Headers**. It needs zone access the deploy token does not
+have (`account:read`, `user:read`, `pages:write`; not even `zone:read`), so it
+cannot be scripted from here. The docs are explicit that
+this is the off switch: "Cloudflare does not override or insert Cache-Control
+headers if you set Browser Cache TTL to Respect Existing Headers." It is
+zone-wide, which suits a zone whose subdomains are independent deploys -- each
+project's own `_headers` then governs its own caching. A Cache Rule scoped to
+`treerings.howardalandman.org/*` is the surgical alternative if a future project
+on this zone ever wants the 4-hour default back.
 
-- a Cache Rule on the zone for `treerings.howardalandman.org/*` set to respect
-  origin `Cache-Control`;
-- zone Browser Cache TTL set to "Respect Existing Headers";
-- version the payload path (`data/v1/...`) in `emit.py` + `app.js`, which the
-  `_headers` comment already proposes and which makes long caching correct
-  rather than merely tolerated.
+Verified after the change: all seven fetch paths now return byte-identical
+`Cache-Control` from the custom domain and from `ehd-612.pages.dev` --
+`no-cache` on `/data/*`, `/app.js`, `/style.css`, and Pages' own
+`public, max-age=0, must-revalidate` on `/` and `/favicon.ico`. Edge caching
+survives the change (`cf-cache-status: REVALIDATED`), so the CDN still serves
+the bytes and only the browser-facing header changed. Compression and
+negotiation are unaffected: `logs.bin` still 413,182 B br decoding to 1,836,696,
+still 1,836,696 raw for a gzip-only client.
 
-Note this is independent of the compression work -- it predates it and applies
-to `app.js` and `style.css` equally. It was not caught earlier because the
-original post-deploy check did not compare the custom domain against pages.dev.
+Re-verify with a cache-busting query if this is ever revisited, or the edge's
+held objects answer for the old setting -- that is what made the first check
+after the compression deploy look like a failure:
+
+```bash
+for p in /data/logs.bin /app.js /style.css; do
+  curl -sI "https://treerings.howardalandman.org$p?cb=$RANDOM" | grep -i cache-control
+done   # want no-cache, not max-age=14400
+```
+
+The parity check against `ehd-612.pages.dev` is the one worth keeping: the Pages
+origin shows what `_headers` actually declares, so any future divergence between
+the two hostnames is a zone setting interfering again.
+
+Two alternatives were considered and rejected:
+
+- **Mark the payloads `private` or `no-store`** so the edge stops caching them
+  and the override stops applying -- which is exactly why the `.json` files
+  escaped. It would work from `_headers` alone, with no dashboard access, but it
+  buys a correct header by giving up edge caching on the largest asset on the
+  site. Wrong trade.
+- **Content-hashed payload paths plus `immutable`**, which the `_headers`
+  comment already proposes. Better end state, and it makes any cache
+  misconfiguration harmless by construction rather than by policy -- but it does
+  not by itself fix what is broken here, since `app.js` and `style.css` are
+  overridden too and a stale `app.js` against fresh data is its own hazard.
+  Worth doing when the extra revalidation round-trip starts to matter. Not a
+  substitute for the setting above.
+
+This was independent of the compression work -- it predated it and applied to
+`app.js` and `style.css` equally. It went uncaught because the original
+post-deploy check did not compare the custom domain against pages.dev.
 
 ## Payload compression
 
