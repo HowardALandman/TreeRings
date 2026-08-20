@@ -147,18 +147,18 @@ measure the thing you just replaced and believe the deploy failed.
 is what `ehd-612.pages.dev` and the deployment URLs returned. On
 `treerings.howardalandman.org` it came back as `max-age=14400` instead.
 
-The mechanism is the zone's **Browser Cache TTL**, still on Cloudflare's 4-hour
-default (14400 s exactly). Per Cloudflare's docs it "overrides any Cache-Control
-or Expires headers" whose value "is less than the Browser Cache TTL setting" --
-and `no-cache` is less than four hours, so every asset the edge considers
-cacheable gets rewritten. Confirmed rather than inferred: the rewrite happens
-even on `cf-cache-status: MISS`, and the same asset fetched from
-`ehd-612.pages.dev`, with no zone in front, still says `no-cache`.
+The mechanism was the zone's **Browser Cache TTL**, sitting on Cloudflare's
+4-hour default (14400 s exactly). Per Cloudflare's docs it "overrides any
+Cache-Control or Expires headers" whose value "is less than the Browser Cache
+TTL setting" -- and `no-cache` is less than four hours, so every asset the edge
+considered cacheable got rewritten. Confirmed rather than inferred: the rewrite
+happened even on `cf-cache-status: MISS`, and the same asset fetched from
+`ehd-612.pages.dev`, with no zone in front, still said `no-cache`.
 
-What escapes it is what the edge does not cache at all -- `.json` and HTML come
-back `DYNAMIC` and keep their headers; the cacheable extensions do not:
+What escaped it was what the edge does not cache at all -- `.json` and HTML come
+back `DYNAMIC` and keep their headers; the cacheable extensions did not:
 
-| | Cache-Control served | cf-cache-status |
+| | Cache-Control served (before the fix) | cf-cache-status |
 |---|---|---|
 | `logs.bin`, `app.js`, `style.css`, `favicon.ico` | `max-age=14400` | REVALIDATED |
 | `index.json`, `values/*.json`, `/` | `no-cache` | DYNAMIC |
@@ -174,9 +174,9 @@ error is the symptom; the setting below is the fix.
 `howardalandman.org` zone → Caching → Configuration → Browser Cache TTL →
 **Respect Existing Headers**. It needs zone access the deploy token does not
 have (`account:read`, `user:read`, `pages:write`; not even `zone:read`), so it
-cannot be scripted from here. The docs are explicit that
-this is the off switch: "Cloudflare does not override or insert Cache-Control
-headers if you set Browser Cache TTL to Respect Existing Headers." It is
+cannot be scripted from here. The docs are explicit that this is the off
+switch: "Cloudflare does not override or insert Cache-Control headers if you set
+Browser Cache TTL to Respect Existing Headers." It is
 zone-wide, which suits a zone whose subdomains are independent deploys -- each
 project's own `_headers` then governs its own caching. A Cache Rule scoped to
 `treerings.howardalandman.org/*` is the surgical alternative if a future project
@@ -241,9 +241,8 @@ first-paint requests with `Accept-Encoding: br, gzip, deflate`:
 | **first load** | **2,192,469 (2.09 MiB)** | **678,734 (0.65 MiB)** |
 
 69% smaller, on the live custom domain. `logs.bin` was 84% of first load and
-Cloudflare never touched it:
-the edge's auto-compression works from a content-type allowlist that excludes
-`application/octet-stream`. `index.json` *was* compressed, but the edge's
+Cloudflare never touched it: the edge's auto-compression works from a
+content-type allowlist that excludes `application/octet-stream`. `index.json` *was* compressed, but the edge's
 on-the-fly brotli is tuned for speed rather than ratio (345,660 B against
 254,711 B for `brotli -q 11`), so pre-compressing it wins another 91 KB.
 
@@ -290,7 +289,13 @@ the classic overlapping-chronology ladder and the most legible entry point.
   `ehd/fetch.py` `list_europe_files`). The other seven ITRDB regional directories
   are `africa`, `asia`, `atlantic`, `australia`, `centralamerica`, `northamerica`,
   `southamerica`; everything downstream of the fetch is already region-agnostic.
-
+- **Content-hashed payload paths.** `no-cache` costs a revalidation round-trip on
+  every visit and depends on nothing upstream rewriting it -- which is exactly
+  what the zone did until 2026-08-20. Hashing the payload filenames and serving
+  them `immutable` would make staleness impossible by construction instead of by
+  policy, and would be faster. Hash `app.js` and `style.css` too, or the same
+  mismatch just moves there. Not worth it at current traffic; see the cache
+  discussion under Hosting.
 - **Taxon colour beyond 6 groups.** Only 3 hues can be distinguished at
   arbitrary adjacency; the by-taxon band layout is what makes 6 legal. Do not
   add hues without re-running the validator.

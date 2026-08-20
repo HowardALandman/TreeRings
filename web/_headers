@@ -10,6 +10,15 @@
 #
 # If the extra round-trip ever matters, the fix is to version the payload path
 # (data/v1/...) in emit.py + app.js, and only then switch to immutable.
+#
+# This policy is not self-enforcing.  The Cloudflare zone in front of the custom
+# domain can rewrite it, and did: Browser Cache TTL sat on its 4-hour default
+# and silently replaced no-cache with max-age=14400 on every edge-cacheable path
+# here, which is exactly the pinning the note above says to avoid.  Fixed
+# 2026-08-20 by setting Browser Cache TTL to Respect Existing Headers.  To check
+# the policy is actually in force, compare treerings.howardalandman.org against
+# ehd-612.pages.dev -- the Pages origin serves what this file declares, so any
+# divergence between the two hostnames is the zone interfering again.
 
 /*
   X-Content-Type-Options: nosniff
