@@ -37,10 +37,12 @@ python -m ehd.validate   # cross-check parser against dplR + invariants
 python scripts/serve.py                              # then open localhost:8777
 ```
 
-`scripts/make_favicon.py` regenerates `web/favicon.{ico,png,svg}` from the
+`scripts/make_favicon.py` regenerates `web/favicon.{ico,svg}` from the
 palette in `style.css`; it is not part of the pipeline and only needs rerunning
 if the palette changes. It needs `ffmpeg` (already installed) to pack the ICO,
-and writes the PNG with stdlib `zlib` because the venv has no image library.
+and writes its intermediate PNG with stdlib `zlib` because the venv has no
+image library. That PNG goes to a temp dir, not `web/`, which is the deploy
+directory.
 
 Use `scripts/serve.py`, not `python -m http.server`: `ehd.emit` writes
 `logs.bin` and `index.json` brotli-compressed under their plain names, and
@@ -71,7 +73,8 @@ Note the external drive's *root* is `root:wheel` and not writable by `howard`;
 - 5,623 `.rwl` files listed in ITRDB `measurements/europe/`
 - → 2,061 files after dedup, → **76,745 logs**, 76,529 plotted
 - 216 logs withheld as floating; 23 plotted over a wrong declared span
-  (`disputed`); 3,464 dated but unverifiable against metadata
+  (`disputed`, and going to zero on the next harvest — NCEI fixed both
+  collections, see below); 3,464 dated but unverifiable against metadata
 - Span 5407 BC – 2023 CE; 2,054 sites
 
 ## Format traps, all found in real files
@@ -98,15 +101,26 @@ test in `tests/`.
 7. **NCEI's `Continent>Europe` filter is unusable.** Of 6,000 studies it returns,
    only 1,541 have European coordinates; it also omits genuine European studies.
    The `measurements/europe/` directory listing defines the corpus instead.
-8. **A declared span narrower than the data is normal, not a sign of relative
-   dating.** The declared span describes the site chronology, not the longest
-   log: fran10 declares 1943–1975 and measures 1747–1988. The first classifier
-   demanded endpoint agreement and so called 2,682 logs floating when only 216
-   are; overlap is the right test. See `tests/test_dating.py`.
+8. **A declared span that disagrees with the data is an archive defect, but
+   overlap is still the right test.** The first classifier demanded endpoint
+   agreement and so called 2,682 logs floating when only 216 are.
+
+   The original reasoning here was wrong and is corrected: it claimed a
+   narrower declared span was *normal*, describing the site chronology rather
+   than the longest log, with fran10 (declared 1943–1975, measured 1747–1988)
+   as the worked example. NCEI say the opposite — the study range is meant to
+   match the `.rwl` file's range — and they changed fran10 to 1747–1988 on
+   2026-08-21 when asked. The corpus agrees with them: **1,871 of the 2,029
+   deduplicated files with a study-record span match it exactly (92.2%)**, and
+   narrower-than-data occurs in 70 files, not routinely.
+
+   Overlap remains correct as a *classifier*, because it is robust to metadata
+   being wrong in either direction, which it demonstrably is. What changed is
+   the justification, not the test. See `tests/test_dating.py`.
 
 ## Verification
 
-- `pytest tests/` — 52 tests: parser fixtures are the files that broke earlier
+- `pytest tests/` — 59 tests: parser fixtures are the files that broke earlier
   parsers; `test_dating.py` pins every real collection the classifier must
   separate into absolute / floating / disputed.
 - `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,154
@@ -403,21 +417,78 @@ the classic overlapping-chronology ladder and the most legible entry point.
   arbitrary adjacency; the by-taxon band layout is what makes 6 legal. Do not
   add hues without re-running the validator.
 - **Metadata gaps.** 3,464 logs lack a declared span to check dating against.
-- **Metadata defects reported to `paleo@noaa.gov`** — sent 2026-08-19 (Howard
-  edited and added to the draft before sending); awaiting reply. See
-  `docs/ncei-metadata-report.md`. Re-checked live against the study
-  API on 2026-08-18:
-  - **BRIT101** (study 44081): the search record says `271 276`; the file's own
-    header says `271 726` and the data ends at 726. The file is right, and the
-    NOAA template sibling carries no year fields — the defect is in the search
-    database alone.
-  - **NETH005** (study 3626): declares −66…106, data measures 1834–2006 — off
-    by exactly 1900. Wrong in both the study record and `neth005-rwl-noaa.txt`
-    (which states `Time_Unit: AD`).
-  - **BRIT** (study 4225): declares 1750–1975, data measures 812–1458; wrong in
-    the record, the template, and the `.rwl` header. The file also mixes three
-    site codes (346 at 902–1203, 347 at 1131–1458, 348 at 812–1080) where the
-    header describes 346 only.
+- **Metadata defects reported to `paleo@noaa.gov` — all accepted and fixed.**
+  Sent 2026-08-19 (Howard edited the draft before sending); Ed Gille, NCEI
+  Paleoclimatology Data Manager, replied 2026-08-21 and corrected all three.
+  See `docs/ncei-metadata-report.md`. Verified live against the study API:
+
+  | Study | Was | Now | Measured |
+  |---|---|---|---|
+  | BRIT101 (44081) | 271–276 | 271–726 | 271–726 |
+  | NETH005 (3626) | −66–106 | 1834–2006 | 1834–2006 |
+  | BRIT (4225) | 1750–1975 | 812–1458 | 812–1458 |
+  | FRAN10 (2734) | 1943–1975 | 1747–1988 | 1747–1988 |
+
+  He fixed more than the study records: the `-rwl-noaa.txt` templates now carry
+  matching `First_Year`/`Last_Year`, and `brit.rwl`'s own header line 2 was
+  rewritten from `1750 1975` to `812 1458`. FRAN10 was not in the report — he
+  found and fixed it from the question the report asked, below.
+
+  One residual: `fran10.rwl` header line 2 still ends `1943   1988` while the
+  record and template say 1747–1988. The start year was not propagated into
+  the file.
+
+  **He answered the definitional question, and the answer inverts trap #8:**
+  "The time ranges for the ITRDB studies should match the range of dates in the
+  rwl file." A declared span that disagrees with the data is a defect, not a
+  site chronology. He then asked for more: "Please let us know if you find any
+  other studies whose age ranges do not match the rwl file age ranges."
+
+  **Consequence for the pipeline:** the `disputed` class empties on the next
+  harvest. Its 23 logs are exactly neth005 (9) + brit (14), and both records
+  are now correct, so re-harvesting drops that class to zero and
+  `tests/test_dating.py`'s comments describing those records in the present
+  tense become false. Fix the comments when that happens; the test inputs are
+  still valid as historical cases.
+
+- **The sweep Ed asked for — next session, needs a fresh harvest first.**
+  Scoped but not built. Ed is actively editing records, so the 2026-08-17
+  `study_metadata.json` snapshot is stale and would report already-fixed rows;
+  re-run `python -m ehd.harvest` before generating anything to send.
+
+  Magnitude, measured against the stale snapshot (so ±4 studies), comparing
+  each deduplicated `.rwl`'s measured span against its study record:
+
+  ```
+  1871  exact match          <- 92.2%, which is why the rule is real
+    70  declared narrower (inside data)
+    59  declared wider (data inside)
+    20  declared offset (partial overlap)
+     9  disjoint
+    32  no study-record span
+  ```
+
+  158 files → 144 distinct studies → **~135 reportable**, after removing the
+  two already fixed and seven that must *not* be "fixed":
+
+  - **The 7 disjoint ones are the floating collections** (swit195–198, swit240,
+    brit099, brit100). Their year column is ring ordinals and the study record
+    holds the *only* absolute anchor — swit195 declares −12287. Applying "make
+    the record match the rwl" to these destroys the placement. Warn him
+    explicitly; this is the most important thing in the report.
+  - **40 studies are off by exactly one year, and 22 are the same error**:
+    correct start, end one year too late. Another 8 are end one year early;
+    30 of the 40 are end-only. That reads as a fencepost bug in whatever
+    derived the ranges, and is worth reporting as one item rather than 40.
+  - 24 studies are off by >100 years, 41 by 11–100.
+
+  Group the report as *systematic off-by-one* / *large discrepancies* /
+  *do-not-touch floating*. Ask Howard whether to send all ~135 or hold at the
+  >10-year subset (~65) before drafting. Coverage caveat to state in the mail:
+  this covers `measurements/europe/` only, 2,061 files after dedup of 5,623
+  listed, of which 2,029 have a study-record span at all — the other seven
+  ITRDB regions are unexamined and the ~7% defect rate probably generalises.
+
 - **Hohenheim per-log data → CEZA Mannheim.** The Hohenheim AG dissolved
   2026-02-28; the collection (~3,000 boxes) is at the Curt-Engelhorn-Zentrum
   Archäometrie, which is entering existing ring-width measurements into a
