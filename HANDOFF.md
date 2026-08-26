@@ -277,6 +277,13 @@ The reason none of this can be done in `app.js`: crawlers do not run JavaScript,
 so the visualisation, which exists only as pixels drawn into a `<canvas>`, is
 invisible to them. Everything a shared link shows has to be static.
 
+**The log count is hardcoded in three places in `index.html`** — the meta
+description, `og:description` and `og:title` all say 76,529, and nothing checks
+them against `emit`'s actual `n_logs`. Same drift as `og.jpg` below, and the
+same fix if it ever matters: have `emit` write the head, or at minimum assert
+the number still matches. `og:title` is deliberately *not* the same string as
+`og:site_name`; Facebook stacks the two and repeating the name prints it twice.
+
 `web/og.jpg` is **a hand-captured screenshot, not a build artifact** — 1200×630,
 the "Packed together / Before 1 CE" ladder, cropped from a 1316×906 browser
 capture and scaled with `ffmpeg`. It is committed because nothing regenerates
