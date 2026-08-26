@@ -1,0 +1,15 @@
+# European Tree-Ring Archive — https://treerings.howardalandman.org/
+#
+# The site is one page.  Everything under /data/ is machine payload the viewer
+# fetches at runtime: a 1.8 MB binary of packed rectangles and 2,054 JSON
+# ring-width shards.  None of it is useful as a search result, and the
+# visualisation it feeds is drawn into a <canvas>, so there is nothing for a
+# crawler to read by rendering the page either.
+#
+# Deliberately silent on AI training crawlers (GPTBot, CCBot, Google-Extended
+# and the rest): the Cloudflare zone is set to allow crawlers, and this file
+# does not contradict it.  Change both together, or they disagree.
+
+User-agent: *
+Disallow: /data/
+Allow: /

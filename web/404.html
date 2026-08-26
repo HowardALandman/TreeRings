@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>404 — Page Not Found — European Tree-Ring Archive</title>
+<meta name="robots" content="noindex">
+
+<!-- This file's *existence* is load-bearing, quite apart from what it says.
+     Cloudflare Pages: "If your project does not include a top-level 404.html
+     file, Pages assumes that you are deploying a single-page application" and
+     serves index.html with a 200 for every unmatched path.  That is why a
+     missing favicon once passed a post-deploy check.  Deleting this file
+     silently turns every 404 on the site back into a 200.
+     scripts/verify_deploy.py asserts an unknown path returns 404. -->
+
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<style>
+  /* style.css sets overflow:hidden on body for the viewer's canvas stage;
+     this page is an ordinary document and needs to scroll on short screens. */
+  html, body { overflow: auto; height: auto; min-height: 100%; }
+
+  .lost {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 4px;
+    padding: 40px 24px;
+    box-sizing: border-box;
+  }
+  .lost svg { width: min(420px, 82vw); height: auto; margin-bottom: 4px; }
+  .lost h1 {
+    margin: 0;
+    font-size: clamp(64px, 17vw, 128px);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: var(--text-primary);
+  }
+  .lost .shout {
+    margin: 10px 0 0;
+    font-size: clamp(17px, 3.4vw, 22px);
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .lost .sub {
+    margin: 8px 0 0;
+    max-width: 46ch;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  .lost a.home {
+    display: inline-block;
+    margin-top: 26px;
+    padding: 9px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface-2);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .lost a.home:hover { background: var(--surface-3); }
+  .lost a.home:focus-visible { outline: 2px solid var(--pine); outline-offset: 2px; }
+  .lost .footnote {
+    margin-top: 34px;
+    font-size: 12px;
+    color: var(--text-muted);
+    max-width: 52ch;
+  }
+  .lost .footnote a { color: var(--text-secondary); }
+</style>
+</head>
+<body>
+
+<main class="lost">
+
+  <!-- A log snapped in two, ring faces exposed at the break.  Drawn from the
+       taxon palette so it belongs to the same picture as the viewer. -->
+  <svg viewBox="0 34 480 142" role="img"
+       aria-label="A tree log snapped in two, its growth rings exposed at the break">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+
+      <!-- ---- left piece, tipped down to the left ---- -->
+      <g transform="rotate(-7 150 105)">
+        <!-- bark barrel -->
+        <path d="M34 68 H176 L188 84 L172 98 L190 112 L174 126 L184 142 H34
+                 Q16 142 16 105 Q16 68 34 68 Z"
+              fill="var(--oak)" stroke="var(--oak)" stroke-width="2"/>
+        <!-- bark grain -->
+        <path d="M44 84 H150 M44 105 H162 M44 126 H150"
+              stroke="var(--surface-1)" stroke-width="1.4" opacity="0.28"/>
+        <!-- exposed ring face -->
+        <ellipse cx="181" cy="105" rx="15" ry="37"
+                 fill="var(--larch)" stroke="var(--oak)" stroke-width="2"/>
+        <ellipse cx="181" cy="105" rx="10.5" ry="26" stroke="var(--surface-1)"
+                 stroke-width="1.7" opacity="0.7"/>
+        <ellipse cx="181" cy="105" rx="6.5" ry="16" stroke="var(--surface-1)"
+                 stroke-width="1.7" opacity="0.7"/>
+        <ellipse cx="181" cy="105" rx="2.6" ry="6.5" fill="var(--surface-1)"
+                 opacity="0.65" stroke="none"/>
+      </g>
+
+      <!-- ---- right piece, tipped up to the right ----
+           Barrel first, ring face on top: drawn the other way round the bark
+           paints over the rings and the break reads as a plain cut end. -->
+      <g transform="rotate(8 330 105)">
+        <!-- bark barrel -->
+        <path d="M446 68 H304 L292 84 L308 98 L290 112 L306 126 L296 142 H446
+                 Q464 142 464 105 Q464 68 446 68 Z"
+              fill="var(--oak)" stroke="var(--oak)" stroke-width="2"/>
+        <path d="M330 84 H436 M330 105 H436 M330 126 H436"
+              stroke="var(--surface-1)" stroke-width="1.4" opacity="0.28"/>
+        <!-- exposed ring face -->
+        <ellipse cx="299" cy="105" rx="15" ry="37"
+                 fill="var(--larch)" stroke="var(--oak)" stroke-width="2"/>
+        <ellipse cx="299" cy="105" rx="10.5" ry="26" stroke="var(--surface-1)"
+                 stroke-width="1.7" opacity="0.7"/>
+        <ellipse cx="299" cy="105" rx="6.5" ry="16" stroke="var(--surface-1)"
+                 stroke-width="1.7" opacity="0.7"/>
+        <ellipse cx="299" cy="105" rx="2.6" ry="6.5" fill="var(--surface-1)"
+                 opacity="0.65" stroke="none"/>
+      </g>
+
+      <!-- ---- splinters flying out of the break ---- -->
+      <g stroke="var(--oak)" stroke-width="3" opacity="0.9">
+        <path d="M234 60 l13 -16"/>
+        <path d="M246 86 l20 -7"/>
+        <path d="M244 128 l20 8"/>
+        <path d="M233 152 l12 17"/>
+      </g>
+    </g>
+  </svg>
+
+  <h1>404</h1>
+  <p class="shout">Uh-oh! Looks like something broke!</p>
+  <p class="sub">
+    This URL doesn’t cross-date against anything in the archive.
+  </p>
+
+  <a class="home" href="/">← Back to the archive</a>
+
+  <p class="footnote">
+    Don’t feel bad — 216 logs in the collection are floating too. Their rings
+    are numbered from one, so nobody knows what year they belong to either.
+  </p>
+
+</main>
+
+</body>
+</html>

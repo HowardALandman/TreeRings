@@ -59,6 +59,7 @@ MISSING_PATH = "/verify-deploy-canary-does-not-exist"
 # fetch is lazy and so is the first thing a broken deploy hides.
 PATHS = [
     ("/", "text/html"),
+    ("/robots.txt", "text/plain"),
     ("/app.js", ("application/javascript", "text/javascript")),
     ("/style.css", "text/css"),
     ("/favicon.ico", ("image/", "application/octet-stream")),
@@ -388,12 +389,21 @@ def stable_fallback(origin: str, res: Result, attempts: int = 4) -> str | None:
     """
     print("\ndetector self-check")
     seen = ""
+    status = 0
     for attempt in range(attempts):
-        _, h1, b1 = fetch(origin + MISSING_PATH)
+        status, h1, b1 = fetch(origin + MISSING_PATH)
         _, h2, b2 = fetch(origin + MISSING_PATH + "-2")
         a, b = fingerprint(decoded(h1, b1)), fingerprint(decoded(h2, b2))
         if a == b:
             res.check(True, "two unknown paths return the same fallback body")
+            # web/404.html is what keeps Pages out of single-page-application
+            # mode.  Without it every unknown path is a 200 serving index.html,
+            # which is how a deploy with no favicon once passed its check.
+            res.check(
+                status == 404,
+                "an unknown path returns 404, not the SPA fallback 200",
+                f"got {status} -- web/404.html missing from the deploy?",
+            )
             return a
         seen = f"{a} vs {b}"
         if attempt < attempts - 1:
