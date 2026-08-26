@@ -130,6 +130,36 @@ def fingerprint(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()[:16]
 
 
+# Scripts the Cloudflare zone injects into HTML it serves, which the Pages
+# origin does not.  Listing them by name rather than skipping the comparison
+# makes this a stronger check, not a weaker one: anything else appearing in
+# the served HTML still fails, and a beacon that stops being injected shows
+# up in the run's output.
+ZONE_INJECTIONS = {
+    "cloudflareinsights.com beacon (Web Analytics, enabled on the zone)": (
+        b"static.cloudflareinsights.com/beacon.min.js"
+    ),
+}
+
+
+def strip_zone_injections(html: bytes) -> tuple[bytes, list[str]]:
+    """Remove known zone-injected <script> tags, reporting what was removed."""
+    found: list[str] = []
+    for name, needle in ZONE_INJECTIONS.items():
+        while needle in html:
+            i = html.rfind(b"<script", 0, html.find(needle))
+            j = html.find(b"</script>", i)
+            if i == -1 or j == -1:
+                break
+            end = j + len(b"</script>")
+            # Take the newline the injection brought with it, if any.
+            if html[end : end + 1] == b"\n":
+                end += 1
+            html = html[:i] + html[end:]
+            found.append(name)
+    return html, found
+
+
 def rules_for(path: str) -> dict[str, str]:
     """What web/_headers says this path should get."""
     out: dict[str, str] = {}
@@ -172,10 +202,14 @@ def verify(origin: str, res: Result) -> None:
             # body alone.  Compare it to the build instead, which is a
             # stronger check: it catches a deploy that shipped a stale page.
             local = open(os.path.join(WEB, "index.html"), "rb").read()
+            clean, injected = strip_zone_injections(got)
+            for what in injected:
+                print(f"  ---   zone injected {what}")
             res.check(
-                got == local,
-                "/ matches the local build byte for byte",
-                f"live {len(got):,} B, local {len(local):,} B",
+                clean == local,
+                "/ matches the local build, allowing for known zone injections",
+                f"live {len(got):,} B ({len(clean):,} after stripping "
+                f"{len(injected)} injection(s)), local {len(local):,} B",
             )
         else:
             res.check(
@@ -319,7 +353,20 @@ def verify_parity(res: Result) -> None:
     for path, _ in PATHS:
         _, a, _b = fetch(ORIGIN + path)
         _, b, _b2 = fetch(PAGES_ORIGIN + path)
-        for name in ("Cache-Control", "Content-Encoding"):
+        declared = rules_for(path)
+
+        # Cache-Control is compared everywhere, declared or not: rewriting it
+        # is exactly what the zone did, and on the paths _headers says nothing
+        # about it is Pages' own default that must survive.
+        names = ["Cache-Control"]
+        # Content-Encoding is only comparable where _headers pins it.  Where
+        # it does not, the value is whatever each edge decided to negotiate --
+        # og.jpg came back `br` from one origin and unencoded from the other
+        # on consecutive requests -- so comparing it tests the weather.
+        if "Content-Encoding" in declared:
+            names.append("Content-Encoding")
+
+        for name in names:
             res.check(
                 a.get(name) == b.get(name),
                 f"{path} {name} matches the Pages origin",

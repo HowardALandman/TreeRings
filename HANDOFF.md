@@ -160,6 +160,24 @@ compared against the local build instead, which also catches a stale deploy.
 Two things this found on first run, on 2026-08-20's supposedly verified deploy:
 `favicon.ico` was missing (200, `text/html`), and so was any link-preview tag.
 
+**The zone injects a third-party script into the HTML.** Comparing `/` against
+the build turned up 359 bytes the site does not serve:
+
+```html
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/…"
+        data-cf-beacon='{"version":"2024.11.0","token":"…"}' …></script>
+```
+
+That is Cloudflare Web Analytics, switched on at the zone, injected on the
+custom domain only — `ehd-612.pages.dev` serves the file unmodified. It is
+cookieless and Cloudflare's own, so it is not a leak, but it does mean the page
+is not the dependency-free static site the rest of this document describes, and
+it went unnoticed by a post-deploy check that included "browser console clean".
+Turn it off under the zone's Analytics → Web Analytics if that is not wanted.
+The check does not skip the comparison for it: `ZONE_INJECTIONS` in the script
+names the beacon and strips exactly it, so any *other* injected content still
+fails, and a beacon that stops appearing shows up in the run's output.
+
 **The edge cache serves the previous deploy for a while.** The first check after
 deploying showed the *old* `logs.bin` — 1,836,696 B, no `Content-Encoding`,
 `cf-cache-status: HIT`. Nothing was wrong: the object was still cached from the
