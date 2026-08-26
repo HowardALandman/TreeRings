@@ -41,7 +41,7 @@ def test_compressed_payloads_declare_their_encoding():
 def test_uncompressed_payloads_do_not():
     # The values/ shards are written as plain JSON for Cloudflare to compress
     # on the fly; claiming an encoding for them would break every sparkline.
-    for path in ("/data/values/swit195.json", "/app.js", "/index.html"):
+    for path in ("/data/values/alb001.json", "/app.js", "/index.html"):
         assert "Content-Encoding" not in headers_for(path), path
 
 

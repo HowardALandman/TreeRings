@@ -37,6 +37,11 @@ python -m ehd.validate   # cross-check parser against dplR + invariants
 python scripts/serve.py                              # then open localhost:8777
 ```
 
+`scripts/make_favicon.py` regenerates `web/favicon.{ico,png,svg}` from the
+palette in `style.css`; it is not part of the pipeline and only needs rerunning
+if the palette changes. It needs `ffmpeg` (already installed) to pack the ICO,
+and writes the PNG with stdlib `zlib` because the venv has no image library.
+
 Use `scripts/serve.py`, not `python -m http.server`: `ehd.emit` writes
 `logs.bin` and `index.json` brotli-compressed under their plain names, and
 `web/_headers` is what declares that to the browser. The dev server reads the
@@ -101,7 +106,7 @@ test in `tests/`.
 
 ## Verification
 
-- `pytest tests/` — 45 tests: parser fixtures are the files that broke earlier
+- `pytest tests/` — 52 tests: parser fixtures are the files that broke earlier
   parsers; `test_dating.py` pins every real collection the classifier must
   separate into absolute / floating / disputed.
 - `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,154
@@ -128,11 +133,32 @@ already covered `*.howardalandman.org`. The apex is deliberately unrouted, reser
 for an umbrella landing page; further projects go on their own subdomains rather
 than subpaths, so each keeps an independent deploy and file budget.
 
-Verified post-deploy (2026-08-20, after the compression change): all 7 fetch
-paths 200, http→https 301, security headers applied
-(nosniff/Referrer-Policy/X-Frame-Options), both payloads decode to the right
-byte counts, 76,529 logs render, lazy shard fetch draws the sparkline, browser
-console clean.
+Verify a deploy with `python scripts/verify_deploy.py`, which checks every
+served path, the http→https redirect, the security headers, the payload byte
+counts, the link-preview tags, and the custom-domain/pages.dev parity described
+below. Run it after every deploy; it exits non-zero on any failure.
+
+**Do not check status codes.** The recipe this script replaced was a handful of
+curl lines checking `%{http_code}`, and on 2026-08-20 it reported all 7 fetch
+paths passing on a deploy that had no `favicon.ico` at all. Cloudflare Pages
+answers *any* unknown path with **200 and the body of `index.html`**:
+
+```
+$ curl -sI https://treerings.howardalandman.org/nonexistent-xyz
+HTTP/2 200
+content-type: text/html; charset=utf-8
+```
+
+So a 200 says nothing about whether the file was deployed. Every check in the
+script instead fingerprints that fallback body and requires the response to
+differ from it, and asserts an expected content type. The run opens by fetching
+two paths that cannot exist and requiring them to be identical — if the
+fallback is ever unstable, "is a real file" is meaningless and the whole run is
+worthless. `/` is the one path that legitimately *is* `index.html`, so it is
+compared against the local build instead, which also catches a stale deploy.
+
+Two things this found on first run, on 2026-08-20's supposedly verified deploy:
+`favicon.ico` was missing (200, `text/html`), and so was any link-preview tag.
 
 **The edge cache serves the previous deploy for a while.** The first check after
 deploying showed the *old* `logs.bin` — 1,836,696 B, no `Content-Encoding`,
@@ -193,17 +219,14 @@ still 1,836,696 raw for a gzip-only client.
 
 Re-verify with a cache-busting query if this is ever revisited, or the edge's
 held objects answer for the old setting -- that is what made the first check
-after the compression deploy look like a failure:
+after the compression deploy look like a failure. `scripts/verify_deploy.py`
+busts the cache on every request it makes, so this is handled as long as the
+checking goes through the script.
 
-```bash
-for p in /data/logs.bin /app.js /style.css; do
-  curl -sI "https://treerings.howardalandman.org$p?cb=$RANDOM" | grep -i cache-control
-done   # want no-cache, not max-age=14400
-```
-
-The parity check against `ehd-612.pages.dev` is the one worth keeping: the Pages
-origin shows what `_headers` actually declares, so any future divergence between
-the two hostnames is a zone setting interfering again.
+The parity check against `ehd-612.pages.dev` is the one worth keeping, and is
+now `verify_parity()` in that script rather than a note here: the Pages origin
+shows what `_headers` actually declares, so any future divergence between the
+two hostnames is a zone setting interfering again.
 
 Two alternatives were considered and rejected:
 
@@ -223,6 +246,39 @@ Two alternatives were considered and rejected:
 This was independent of the compression work -- it predated it and applied to
 `app.js` and `style.css` equally. It went uncaught because the original
 post-deploy check did not compare the custom domain against pages.dev.
+
+## Link previews
+
+Sharing the URL on Facebook produced a bare link with no graphic, because the
+served HTML had no Open Graph tags and the site had no image file. Neither half
+works alone — a tag pointing at an undeployed file gives the same blank card as
+no tag at all — so `tests/test_link_preview.py` pins them together offline and
+`scripts/verify_deploy.py` re-checks them against the live site.
+
+The reason none of this can be done in `app.js`: crawlers do not run JavaScript,
+so the visualisation, which exists only as pixels drawn into a `<canvas>`, is
+invisible to them. Everything a shared link shows has to be static.
+
+`web/og.jpg` is **a hand-captured screenshot, not a build artifact** — 1200×630,
+the "Packed together / Before 1 CE" ladder, cropped from a 1316×906 browser
+capture and scaled with `ffmpeg`. It is committed because nothing regenerates
+it, and it will drift from the data as the corpus changes. To recapture: open
+the site, set Layout "Packed together" and Era "Before 1 CE", screenshot the
+viewport, then
+
+```bash
+ffmpeg -i shot.jpg -vf "crop=1316:691:0:0,scale=1200:630:flags=lanczos" -q:v 3 web/og.jpg
+```
+
+The 691 is whatever height gives 1.91:1 at the capture's width; the crop is from
+the top so the title, taxon legend and time axis stay in frame. Rendering this
+in the pipeline instead was considered and deferred — it would need the taxon
+palette duplicated from `app.js` into Python, which is a second source of truth
+for the one thing HANDOFF says not to change without re-running the validator.
+
+**Facebook caches its verdict per URL.** After any change here, put the URL
+through `developers.facebook.com/tools/debug/` and press *Scrape Again*, or the
+old empty card persists no matter what the site now serves.
 
 ## Payload compression
 
