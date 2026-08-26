@@ -35,6 +35,7 @@ import io
 import os
 import random
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -180,13 +181,9 @@ def local_sizes() -> dict[str, tuple[int, int]]:
     return sizes
 
 
-def verify(origin: str, res: Result) -> None:
+def verify(origin: str, res: Result, fallback: str | None) -> None:
     print(f"\n{origin}")
-
-    # Establish what "not deployed" looks like before trusting any 200.
-    status, miss_headers, miss_body = fetch(origin + MISSING_PATH)
-    fallback = fingerprint(decoded(miss_headers, miss_body))
-    print(f"  ---   not-found fallback: {status}, body {fallback}")
+    print(f"  ---   not-found fallback body: {fallback or '(unsettled)'}")
 
     sizes = local_sizes()
 
@@ -211,7 +208,7 @@ def verify(origin: str, res: Result) -> None:
                 f"live {len(got):,} B ({len(clean):,} after stripping "
                 f"{len(injected)} injection(s)), local {len(local):,} B",
             )
-        else:
+        elif fallback is not None:
             res.check(
                 fingerprint(got) != fallback,
                 f"{label} is a real file, not the not-found fallback",
@@ -258,7 +255,7 @@ def verify(origin: str, res: Result) -> None:
     _verify_link_preview(origin, res, fallback)
 
 
-def _verify_shard(origin: str, res: Result, fallback: str) -> None:
+def _verify_shard(origin: str, res: Result, fallback: str | None) -> None:
     """One real values/ shard, chosen from the build rather than hardcoded."""
     values = os.path.join(WEB, "data", "values")
     names = sorted(os.listdir(values))[:1] if os.path.isdir(values) else []
@@ -270,7 +267,8 @@ def _verify_shard(origin: str, res: Result, fallback: str) -> None:
     if not res.check(status == 200, f"{path} -> 200", str(status)):
         return
     got = decoded(headers, body)
-    res.check(fingerprint(got) != fallback, f"{path} is a real file")
+    if fallback is not None:
+        res.check(fingerprint(got) != fallback, f"{path} is a real file")
     res.check(
         (headers.get("Content-Type") or "").startswith("application/json"),
         f"{path} content-type is application/json",
@@ -282,7 +280,7 @@ def _verify_shard(origin: str, res: Result, fallback: str) -> None:
     )
 
 
-def _verify_link_preview(origin: str, res: Result, fallback: str) -> None:
+def _verify_link_preview(origin: str, res: Result, fallback: str | None) -> None:
     """The tags Facebook et al. read, and that og:image actually resolves."""
     _, headers, body = fetch(origin + "/")
     html = decoded(headers, body).decode("utf-8", "replace")
@@ -311,10 +309,11 @@ def _verify_link_preview(origin: str, res: Result, fallback: str) -> None:
             "og:image is served as an image",
             ih.get("Content-Type") or "(none)",
         )
-        res.check(
-            fingerprint(decoded(ih, ibody)) != fallback,
-            "og:image is a real file, not the not-found fallback",
-        )
+        if fallback is not None:
+            res.check(
+                fingerprint(decoded(ih, ibody)) != fallback,
+                "og:image is a real file, not the not-found fallback",
+            )
 
 
 def verify_https_redirect(res: Result) -> None:
@@ -374,16 +373,40 @@ def verify_parity(res: Result) -> None:
             )
 
 
-def verify_missing_is_detected(res: Result, origin: str) -> None:
-    """Prove the not-found detector works, or nothing above means anything."""
+def stable_fallback(origin: str, res: Result, attempts: int = 4) -> str | None:
+    """Fingerprint the not-found body, requiring two unknown paths to agree.
+
+    Every "is a real file" check is a comparison against this value, so an
+    unstable or stale fingerprint silently invalidates the whole run -- which
+    makes a false failure here worse than a false failure anywhere else.
+
+    Run immediately after a deploy, two consecutive fetches can legitimately
+    disagree: one edge node answers from the deploy that just landed and the
+    other has not caught up, so the fallback (which is index.html, and has
+    just changed) differs.  That is propagation, not a broken detector, so it
+    is retried before it is called a failure.
+    """
     print("\ndetector self-check")
-    _, h1, b1 = fetch(origin + MISSING_PATH)
-    _, h2, b2 = fetch(origin + MISSING_PATH + "-2")
+    seen = ""
+    for attempt in range(attempts):
+        _, h1, b1 = fetch(origin + MISSING_PATH)
+        _, h2, b2 = fetch(origin + MISSING_PATH + "-2")
+        a, b = fingerprint(decoded(h1, b1)), fingerprint(decoded(h2, b2))
+        if a == b:
+            res.check(True, "two unknown paths return the same fallback body")
+            return a
+        seen = f"{a} vs {b}"
+        if attempt < attempts - 1:
+            print(f"  ...   fallback unsettled ({seen}), retrying")
+            time.sleep(3)
+
     res.check(
-        fingerprint(decoded(h1, b1)) == fingerprint(decoded(h2, b2)),
+        False,
         "two unknown paths return the same fallback body",
-        "the fallback is not stable, so 'is a real file' cannot be trusted",
+        f"{seen} after {attempts} tries -- if a deploy just landed, wait and "
+        f"re-run; otherwise 'is a real file' cannot be trusted",
     )
+    return None
 
 
 def main(argv: list[str]) -> int:
@@ -393,8 +416,8 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv[1:])
 
     res = Result()
-    verify_missing_is_detected(res, args.origin)
-    verify(args.origin, res)
+    fallback = stable_fallback(args.origin, res)
+    verify(args.origin, res, fallback)
     if args.origin == ORIGIN:
         print()
         verify_https_redirect(res)
