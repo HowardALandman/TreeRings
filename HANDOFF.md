@@ -298,6 +298,28 @@ for the one thing HANDOFF says not to change without re-running the validator.
 through `developers.facebook.com/tools/debug/` and press *Scrape Again*, or the
 old empty card persists no matter what the site now serves.
 
+**Do not trust the Sharing Debugger. Paste the link into a post composer.**
+Verified working 2026-08-26 — the card renders with the ladder image. Getting
+there cost a long detour chasing diagnostics that were all wrong:
+
+| What the tool said | What was true |
+|---|---|
+| 403 "Bad Response Code" on the `http://` URL | http returns a clean single-hop 301 to https |
+| "og:image should be explicitly provided" | `og:image` is present, and found by a standards HTML parser |
+| echo: "An error occurred while fetching content" | failed identically for `ehd-612.pages.dev`, which has no zone in front of it |
+
+The echo failure on *both* hosts is what broke the case open: those two share no
+security configuration, so a fault common to both is a fault in the tool. Meta's
+crawler was never blocked — Bot Fight Mode and AI-crawler blocking were both
+already off on the zone. The 403 has no explanation and did not need one.
+
+The lesson worth keeping: this instrument reports failures for a site that is
+provably fine, so establish a control before believing it (point echo at
+`example.com`) and treat the composer as ground truth. Checking from this end —
+status, content type, parsed tags, image dimensions, DNS, TLS, IPv6 — proved
+everything except the one thing that mattered, because every one of those
+requests came from here rather than from Meta's network.
+
 ## Payload compression
 
 `ehd.emit` writes `logs.bin` and `index.json` brotli-compressed at quality 11
