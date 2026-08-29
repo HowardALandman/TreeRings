@@ -16,8 +16,10 @@ We therefore keep one file per site code, preferring total ring width, and key
 every log on ``site/series_id``.
 
 Metadata is merged from the NOAA-template headers (structured and complete),
-falling back to the study API.  The legacy Tucson header is a last resort: its
-layout varies so much between files that parsing it reliably is not worth it.
+falling back to the study API.  Two template families exist and only
+``*-rwl-noaa.txt`` is maintained - see ``read_template_header``.  The legacy
+Tucson header is a last resort: its layout varies so much between files that
+parsing it reliably is not worth it.
 """
 
 from __future__ import annotations
@@ -177,6 +179,13 @@ def select_files(paths: list[str], stats: CorpusStats) -> dict[str, str]:
     return chosen
 
 
+# Two template generations, two vocabularies for the same facts.  The v2 files
+# (``*-noaa.rwl``, frozen since 2023) say Earliest_Year / Most_Recent_Year /
+# Elevation / Online_Resource; the v3 files (``*-rwl-noaa.txt``, current) say
+# First_Year / Last_Year / Elevation_m / NOAA_Landing_Page.  Reading only the v2
+# names against a v3 file yields a header with no declared span at all, which
+# reads downstream as "unverifiable" rather than as an error - so both
+# vocabularies are mapped rather than one being migrated to the other.
 NOAA_FIELDS = {
     "Study_Name": "study_name",
     "Investigators": "investigators",
@@ -186,11 +195,15 @@ NOAA_FIELDS = {
     "Northernmost_Latitude": "lat",
     "Easternmost_Longitude": "lon",
     "Elevation": "elevation",
+    "Elevation_m": "elevation",
     "Species_Name": "species_name",
     "Common_Name": "common_name",
     "Online_Resource": "url",
+    "NOAA_Landing_Page": "url",
     "Earliest_Year": "declared_first",
     "Most_Recent_Year": "declared_last",
+    "First_Year": "declared_first",
+    "Last_Year": "declared_last",
 }
 
 # How far the data may sit outside the declared span before the two are judged
@@ -235,6 +248,39 @@ def read_noaa_header(path: str) -> dict:
     return out
 
 
+def read_template_header(rwl_path: str) -> dict:
+    """Metadata from the NOAA template sibling, preferring the maintained one.
+
+    There are two template families in the archive and only one of them is
+    alive.  NCEI renamed the templates to ``<site>-rwl-noaa.txt`` in February
+    2023 and stopped touching ``<site>-noaa.rwl``: the old family has 2,411
+    files, none dated after 2023-01, while the new one has 3,077 dated through
+    2026-08.  The August 2026 corrections went to ``fran10-rwl-noaa.txt`` and
+    left ``fran10-noaa.rwl`` at its 2020 content, so reading the old name meant
+    reading a three-year-old snapshot of a record that had since been fixed.
+    679 site codes exist only under the new name; 13 only under the old, which
+    is why the old one is still read as a fallback rather than dropped.
+
+    Descriptive fields merge, live winning.  The declared span does *not*: it is
+    taken whole from one source or the other, because a first year from the 2020
+    file paired with a last year from the 2026 file would be a span that has
+    never described anything.
+    """
+    stem = rwl_path[: -len(".rwl")] if rwl_path.endswith(".rwl") else rwl_path
+    legacy = read_noaa_header(stem + "-noaa.rwl")
+    live = read_noaa_header(stem + "-rwl-noaa.txt")
+    meta = {**legacy, **live}
+    for source in (live, legacy):
+        if "declared_first" in source and "declared_last" in source:
+            meta["declared_first"] = source["declared_first"]
+            meta["declared_last"] = source["declared_last"]
+            break
+    else:
+        meta.pop("declared_first", None)
+        meta.pop("declared_last", None)
+    return meta
+
+
 def species_from_study_name(name: str) -> str:
     """ITRDB study names embed the species code: '... - QURO - ITRDB GERM001'."""
     m = re.search(r" - ([A-Z]{4}) - ITRDB", name or "")
@@ -276,10 +322,10 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
         stats.warnings.extend(result.warnings)
 
         # Prefer the NOAA-template sibling's header; fall back to the API.
-        meta = read_noaa_header(path.replace(".rwl", "-noaa.rwl"))
+        meta = read_template_header(path)
         api = api_meta.get(name) or {}
-        # Only ~40% of files have a NOAA-template sibling, so fall back to the
-        # study API for the declared span; without one, dating is unverifiable.
+        # Not every file has a NOAA-template sibling, so fall back to the study
+        # API for the declared span; without one, dating is unverifiable.
         if "declared_first" not in meta and api.get("earliest_year") is not None:
             meta = dict(meta)
             meta["declared_first"] = api.get("earliest_year")
@@ -357,10 +403,30 @@ def declared_span_ce(meta: dict) -> tuple[int, int] | None:
 def declares_years_bp(meta: dict) -> bool:
     """True when the declared span is written in years BP, which count backwards.
 
-    Only two collections in the European corpus do this (brit099 and brit100,
-    the Fenland yews), and both are floating - but the mark is the archive's
-    own, not a guess from magnitude, so it is read directly rather than
-    inferred.
+    Ten collections in the European corpus do this: the Fenland yews (brit099,
+    brit100), the Swiss Late Glacial pines (swit195-198, swit240) and the French
+    Late Glacial pines (fra053-055).  The mark is the archive's own, not a guess
+    from magnitude, so it is read directly rather than inferred.
+
+    Ordering is the mechanism because nothing better is machine-readable, but it
+    is not the *evidence*.  Two independent sources settle the convention, and
+    both say BP rather than BC:
+
+    * the depositors say so in the file - brit099's ``Description`` reads "the
+      TRW series are in index years and have to be converted to cal. years BP
+      with the earliest year being 5224 +/-4 cal. years BP", and brit100 the
+      same with 4612;
+    * NCEI performs the conversion itself for eight of the ten, and it is
+      exactly this one: ``earliestYearCE`` equals ``1950 - First_Year`` for
+      swit195-198, swit240 and fra053-055.
+
+    The two it does *not* convert are brit099 and brit100, whose
+    ``earliestYearCE`` reads 5224 and 4612 - dates in the future.  Reported to
+    NCEI 2026-08-28.
+
+    The explicit ``Time_Unit`` field cannot substitute for the ordering test:
+    brit099 and brit100 say ``CE`` while carrying BP values, and the seven Late
+    Glacial collections leave it empty.
     """
     try:
         return int(float(meta["declared_first"])) > int(float(meta["declared_last"]))

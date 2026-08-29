@@ -5,11 +5,15 @@ Two independent enumerations of "the European corpus" exist, and they disagree:
   A. the ITRDB ``measurements/europe/`` directory listing (file-level, curated)
   B. the NCEI study search API (study-level, richer metadata)
 
-Source B's own ``locationName=Continent>Europe`` filter is not trustworthy - of
-6000 studies it returns, only ~1541 have coordinates inside Europe, while it
-omits genuine European studies such as SWIT240.  So we take A as the definition
+Source B's own ``locationName=Continent>Europe`` filter is not trustworthy in
+either direction.  As of 2026-08-28 it returns 9,022 study records, of which
+6,834 reference a .rwl file, of which only 2,195 have coordinates inside Europe;
+and it omits genuine European studies - SWIT240, and the French Late Glacial
+pines FRA053-055, whose records have to be recovered by id from the study
+numbers written into their own template files.  So we take A as the definition
 of the corpus, use B purely for metadata, join the two on filename, and report
-exactly how much of A that join actually covers.
+exactly how much of A that join actually covers.  ``ehd.sweep`` closes the
+remaining gap by resolving what the join misses.
 
 Usage:
     python -m ehd.harvest
@@ -94,8 +98,16 @@ def main(argv: list[str] | None = None) -> int:
     os.makedirs(out_dir, exist_ok=True)
 
     print("enumerating ITRDB europe/ directory (source A)...")
-    corpus = set(fetch.list_europe_files())
+    listing = fetch.list_europe_index()
+    corpus = set(fetch.list_europe_files(listing))
     print(f"  {len(corpus)} .rwl files")
+    # Snapshot the listing's per-file dates and sizes.  This is the baseline
+    # `fetch --refresh` compares against, and it is the only record of when the
+    # archive last touched a file we hold.
+    listing_path = os.path.join(out_dir, "europe_listing.json")
+    with open(listing_path, "w") as fh:
+        json.dump(listing, fh)
+    print(f"  listing snapshot -> {listing_path}")
 
     print("harvesting NCEI study metadata (source B)...")
     studies = paginate(

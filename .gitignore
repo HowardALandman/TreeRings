@@ -12,7 +12,13 @@ __pycache__/
 # Generated web payloads: rebuild with `python -m ehd.emit`.
 /web/data/
 
+*.swp
 .DS_Store
+
+# R drops these wherever dplR is invoked from; `python -m ehd.validate` left one
+# in docs/.  Never source, and easy to commit by accident.
+.Rhistory
+.RData
 
 # Wrangler's local state/cache from `npx wrangler pages deploy`.
 .wrangler/

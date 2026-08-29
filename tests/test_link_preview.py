@@ -97,3 +97,41 @@ def jpeg_size(data: bytes) -> tuple[int, int]:
             return width, height
         i += 2 + length
     raise AssertionError("no SOF marker found")
+
+
+def test_hardcoded_log_count_matches_the_build():
+    """The three hardcoded counts in the head drift silently as the corpus moves.
+
+    Nothing in the pipeline writes them, so they are a second source of truth
+    for a number `emit` already computes -- and they were wrong for the whole of
+    the 2026-08-28 harvest, which moved 111 Late Glacial logs out of the plotted
+    set.  Pinned here rather than in emit because the head is hand-written; if
+    that ever changes, this test is what makes the change safe.
+    """
+    import json
+
+    path = os.path.join(WEB, "data", "index.json")
+    if not os.path.exists(path):
+        import pytest
+
+        pytest.skip("web/data not built; run python -m ehd.emit")
+
+    blob = open(path, "rb").read()
+    if not blob.lstrip().startswith(b"{"):
+        brotli = pytest_importorskip_brotli()
+        blob = brotli.decompress(blob)
+    index = json.loads(blob)
+
+    expected = f"{index['n_logs']:,}"
+    for text in (meta("og:title"), meta("og:description"), HTML):
+        assert expected in text, f"expected {expected} logs, head says otherwise"
+
+    # The span is hardcoded in the same sentence and drifts the same way.
+    assert f"{abs(index['year_min'])} BC" in HTML
+    assert f"{index['year_max']} CE" in HTML
+
+
+def pytest_importorskip_brotli():
+    import pytest
+
+    return pytest.importorskip("brotli")

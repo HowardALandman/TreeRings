@@ -1,0 +1,221 @@
+To: paleo@noaa.gov
+Subject: The full list you asked for: 138 European ITRDB studies whose age
+         range disagrees with their .rwl file
+
+Hello Ed,
+
+Thank you for the August corrections - BRIT101, NETH005, BRIT and FRAN10 are
+all correct in the study records now, and I can see you fixed the
+-rwl-noaa.txt templates and brit.rwl's own header line as well. I re-checked
+all four against the live records on 28 August 2026.
+
+You asked to hear about any other studies whose age ranges do not match the
+rwl file age ranges. Here is the complete list for measurements/europe/, with
+the CSV attached. Method, so you can judge how much to trust it:
+
+ - Every .rwl file in the directory listing, deduplicated to one file per site
+   code (5,623 files -> 2,061), parsed and reduced to the extent of its
+   series. The parser agrees with dplR 1.7.9 on 100.0000% of the 65,154 series
+   dplR can read - 0 disagreements - and reads a further 11,591 series dplR
+   declines.
+
+ - Compared against earliestYearCE / mostRecentYearCE from the study search
+   API. Every row in the attached CSV was then re-read individually by
+   NOAAStudyId on the day of writing, so nothing here is a stale snapshot of a
+   record you have already fixed.
+
+ - 1,887 of the 2,056 files with a record span match it exactly (91.8%), which
+   is why the rule is worth enforcing at all.
+
+Summary of the disagreements:
+
+                                        studies    files
+    off by exactly one year                  40       40
+    off by 2-10 years                        39       39
+    off by 11-100 years                      40       54
+    off by more than 100 years               19       19
+                                        -------  -------
+    total                                   138      152
+
+(A study can own more than one measurement file, which is why the two columns
+differ in the third row.)
+
+Three groups, because they want different actions.
+
+
+1. OFF BY EXACTLY ONE YEAR - 40 studies, and 21 share one signature
+------------------------------------------------------------------
+
+In 21 of them the start year is right and the end year is one year later than
+the data. Fourteen are consecutive Polish study codes:
+
+    POLA005 POLA006 POLA007 POLA008 POLA009 POLA010 POLA011 POLA012
+    POLA013 POLA014 POLA015 POLA016 POLA017 POLA018
+    BRIT8 BRIT10 BRIT11 BRIT12 ITA056 PRT002 TUR056
+
+A further 8 are the mirror image - end year one year early - and the remaining
+11 are the other one-year combinations.
+
+Before reporting these I checked that the one-year offset is not mine. Of
+the 21, dplR reads 20 and agrees with my end year on every one of them.
+brit11.rwl, which dplR cannot read, I checked by hand and against a separate
+scanner written not to share my parser's assumptions. In each file several
+series reach the end year, so it is not one odd series either. The last ring
+in pola005.rwl is 1985 and the record says 1986; in brit11.rwl it is 1972
+and the record says 1973.
+
+A run of fourteen consecutive codes sharing one direction reads to me like a
+fencepost in whatever derived the ranges for that batch rather than 21
+independent transcription errors, so it may be one fix rather than 21. I have
+not tried to guess which batch, and I could easily be wrong about the cause;
+the individual rows are all in the CSV either way.
+
+
+2. LARGER DISCREPANCIES - 98 studies, 112 files
+------------------------------------------------
+
+The 19 worst, all confirmed by hand against the live record and a freshly
+downloaded file:
+
+    Study      ID       Record says    .rwl measures   File
+    -------    -----    -----------    -------------   --------------
+    AUST003     3295    1789-1974      1276-1974       aust003.rwl
+    GERM6       3197    1850-1973      1376-1972       germ6.rwl
+    FRAN043    15168    1758-2004      1324-2005       fran043.rwl
+    TURK016     5130    1332-2000      1017-2006       turk016.rwl
+    AUST004     3294    1604-1972      1333-1974       aust004.rwl
+    TURK013     5123    1772-2000      1511-2001       turk013.rwl
+    GRC055     42228     715-2014       715-1803       grc055x.rwl
+    FRAN009     4751    1187-1974       988-1974       fran009.rwl
+    GRC033     41303    1794-2010      1611-2010       grc033.rwl
+    TURK029     3802   -1767--905     -1767--742       turk029.rwl
+    FRAN9       5112    1659-1975      1815-1982       fran9.rwl
+    SWED023     4447    1107-1978      1107-1827       swed023w.rwl
+    GERM21      3297    1333-1976      1466-1837       germ21.rwl
+    SWED304     2663    1667-1779      1661-1910       swed304.rwl
+    SWIT102     4428    1859-1974      1739-1977       swit102.rwl
+    CHE416     37517    1596-2017      1702-2017       che416.rwl
+    FRAN005     4216    1719-1979      1824-1979       fran005.rwl
+    FRAN8       5111    1659-1975      1762-1983       fran8.rwl
+    ITAL025     3559    1598-1990      1700-1990       ital025.rwl
+
+(TURK029 is the one entry with negative years; read "-1767--905" as the range
+-1767 to -905, in the same signed-year convention earliestYearCE uses.)
+
+The remaining 93 files are in the CSV, sorted by the size of the discrepancy.
+
+
+3. TEN COLLECTIONS THAT MUST *NOT* BE CHANGED TO MATCH THEIR FILES
+-------------------------------------------------------------------
+
+This is the most important item in the message, and it runs against the rule
+rather than with it.
+
+    swit195  swit196  swit197  swit198  swit240
+    brit099  brit100
+    fra053   fra054   fra055
+
+Their .rwl year column is ring ordinals, not calendar years - swit195 runs
+1-669, fra053 runs 1-434. The study record is the only place their absolute
+position is written down: swit195's -12287, fra053's 14378-13945 BP. Applying
+"make the record match the rwl file" to these would replace a Late Glacial
+date with a ring count and destroy the only calendar anchor those logs have.
+
+They appear as disagreements under any automated comparison, mine included, so
+I have excluded them from the CSV entirely rather than list them with a
+caveat. BRIT099 and BRIT100 do need one correction, but a different one - see
+item 4 below.
+
+
+OTHER THINGS I NOTICED, IN CASE THEY ARE USEFUL
+------------------------------------------------
+
+1. The .rwl's own header often carries the same wrong range. Of the 152
+   flagged files, 123 have a readable span on header line 2; 79 of those agree
+   with the study record rather than with the data in the same file, and only
+   19 agree with the data. So for most of these, correcting the record alone
+   would leave the file's own header saying the old thing - the situation you
+   fixed by hand for brit.rwl. It also suggests the record was derived
+   faithfully from a header that was already wrong, rather than the record
+   being independently mistaken.
+
+2. The -rwl-noaa.txt template agrees with the study record in all 152 cases,
+   so the two are not independent and neither can be used to check the other.
+
+3. Two studies have no age range at all: 2710 (germ015) and 2704 (germ017).
+
+4. BRIT099 and BRIT100 are missing the BP -> CE conversion. Both declare
+   First_Year / Last_Year in calibrated years BP; the depositors say so in the
+   file itself - brit099-rwl-noaa.txt's Description reads "the TRW series are
+   in index years and have to be converted to cal. years BP with the earliest
+   year being 5224 +/- 4 cal. years BP", and brit100 says the same with 4612.
+
+   The conversion is applied to the other Late Glacial collections but not to
+   these two. For the other eight, the study record's earliestYearCE is
+   exactly 1950 minus the template's First_Year:
+
+       SWIT195   14237 BP  ->  earliestYearCE -12287
+       SWIT240   15000 BP  ->  earliestYearCE -13050
+       FRA053    14378 BP  ->  earliestYearCE -12428
+
+   For BRIT099 and BRIT100 it is not: earliestYearCE reads 5224 and 4612,
+   which taken as CE are dates in the future. They should be -3274 and -2662
+   (and mostRecentYearCE -2863 and -2245).
+
+   To be clear about how this sits with group 3: the fix here is to convert
+   the units, not to replace the span with the file's ring ordinals. The
+   record's 5224-4813 is the right material, in the wrong era.
+
+   Time_Unit says CE in both, so the field cannot be used to catch this, and
+   the seven Late Glacial collections in group 3 leave Time_Unit empty. I
+   ended up inferring BP from the ordering of the pair, which works throughout
+   this corpus but should not have to be the mechanism.
+
+5. The old *-noaa.rwl template files are still served and are now stale.
+   Nothing in that family is dated later than January 2023, while
+   *-rwl-noaa.txt is current - fran10-noaa.rwl still carries its 2020 content
+   and its old span, three years after the record was corrected. Both
+   filenames are in the directory listing with nothing to distinguish them, so
+   anyone who picked the older name is reading superseded metadata. I did,
+   until this week. Retiring them, or noting the supersession in them, would
+   help.
+
+6. fran10.rwl header line 2 still ends "1943   1988" where the record and
+   template now say 1747-1988. The end year was propagated in August, the
+   start year was not.
+
+7. The locationName=Continent>Europe search filter omits European studies.
+   FRA053, FRA054 and FRA055 - French Late Glacial pines, with European
+   coordinates - are not returned by it, and neither is SWIT240. I found them
+   only by resolving study IDs out of the template files. Whatever populates
+   that facet is missing rows.
+
+
+COVERAGE - WHAT THIS LIST DOES NOT COVER
+-----------------------------------------
+
+This is measurements/europe/ only: 5,623 files listed, 2,061 after removing
+-noaa re-encodings and per-variable duplicates, of which 2,056 have a record
+span to check. Three files resolve to no study record by any route I could
+find (germ013l.rwl, germ14_corrected.rwl, germ301_corrected.rwl) and are
+excluded rather than counted as passing.
+
+Where a study owns several measurement files, I compared the record against
+all of them and treated a match with any one - or with their union - as
+correct, so records describing the earlywood or maximum-density file are not
+in this list. That removed 7 candidates.
+
+The other seven ITRDB regions are unexamined. Nothing about the defects here
+looks Europe-specific, so I would expect a similar rate - roughly 7% of
+studies - in africa, asia, atlantic, australia, centralamerica, northamerica
+and southamerica. I am happy to run the same check across all of them and send
+the result if that would be useful; it is the same code and costs me only the
+download.
+
+Best regards,
+Howard Landman
+
+
+Attachment: ncei-sweep-2026-08.csv - one row per file, with study ID and code,
+the declared and measured spans, the signed difference at each end, the class
+of disagreement, and what the template and the .rwl header say.
