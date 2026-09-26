@@ -588,9 +588,22 @@ the classic overlapping-chronology ladder and the most legible entry point.
   still has to reach `disputed` for the next such defect rather than silently
   withholding it as floating.
 
-- **The sweep Ed asked for — built and drafted 2026-08-28, not yet sent.**
-  `ehd/sweep.py`, with `docs/ncei-sweep-2026-08.txt` as the draft mail and
-  `.csv` as its attachment. Howard to edit and send.
+- **The sweep Ed asked for — sent 2026-08-28 19:35; NCEI working through it.**
+  `ehd/sweep.py`, with `docs/ncei-sweep-2026-08.txt` as the mail and `.csv` as
+  its attachment. (This entry said "not yet sent" until 2026-09-26; the send
+  was never recorded here.) Ed Gille acknowledged it, said he would start
+  reviewing the European records from it, and that there is **no immediate
+  need to run the report for other regions** - so the other seven ITRDB
+  directories wait until he asks.
+
+  **Progress, re-read live 2026-09-26:** 10 of the 154 CSV rows have changed,
+  each now matching our measured span exactly, and they are **CSV rows 1-10 in
+  order** (AUST003 ... TURK029) - he is working down the attachment. 142
+  unchanged, 2 have no live span (studies 2710, 2704, as reported). BRIT099/100
+  `earliestYearCE` still read 5224/4612 unconverted. To re-check, re-read each
+  CSV row with `sweep.fetch_study_span(study_id)` and compare with its
+  `declared_*` / `measured_*` columns. After a correction, `fetch --refresh`
+  and a rebuild pick up any changed files and templates.
 
   **The draft is plain text on purpose, and the next one should be too.** It was
   first written in Markdown, which meant tables, `**bold**` and `---` rules that

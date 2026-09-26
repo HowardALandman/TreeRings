@@ -1,0 +1,67 @@
+To: Frank Reinig <ADDRESS>
+Cc: Ulf Büntgen <ADDRESS>
+Subject: Calendar positions for the Swiss Late Glacial ITRDB files
+         (SWIT195-198, SWIT240)
+
+Dear Dr. Reinig, dear Prof. Büntgen,
+
+I build an interactive view of the ITRDB's European measurement files: every
+individual log drawn as one bar on a shared calendar axis, 76,609 of them so
+far, at https://treerings.howardalandman.org. I am writing because the oldest
+material in the archive is also the material I cannot place, and your IntCal20
+work on the Swiss Late Glacial pines is, as far as I can tell, where the
+answer lives.
+
+The five Swiss files number their rings from an arbitrary origin and declare
+only a site-wide range, so nothing in the archive says where each one sits:
+
+  File     Logs  Ordinals   Declared (cal BP)   Example series IDs
+  SWIT195     5  1-669      14237-12750         DAECHAL1, KFKA2090
+  SWIT196     7  1-375      14237-12750         DAEALCH2, KFKA2640
+  SWIT197     9  1-318      14237-12750         DAEALCH3, KFKA3000
+  SWIT198    20  1-286      14237-12750         DAEBOECH, KFKA1100
+  SWIT240    95  53-1434    15000-14000         GAE0010, LAN0650
+
+All four Daettnau files share the same declared range, and NCEI's
+correlation-stats output for SWIT196 gives "Beginning year: 1". Until I have
+a position for each file, these 136 logs stay off the calendar axis rather
+than being drawn at a date nobody published.
+
+My questions:
+
+ 1. Is there a published calendar position for each of these five files - the
+    cal BP of the file's own ring 1, with its uncertainty - following the
+    IntCal20 placement? A pointer to a table or dataset would be ideal.
+
+ 2. Does the internal alignment of the ITRDB files still hold, or were any
+    series re-crossdated or re-assigned in later work, so that a single offset
+    per file would be wrong?
+
+ 3. SWIT240's measured span is exactly 1,382 rings. Is it the floating
+    1382-ring chronology of Kromer et al. (2004, Radiocarbon 46(3)), and if
+    so, is that Cariaco-based anchor superseded by IntCal20?
+
+One question on the Fenland yews (BRIT099, BRIT100), which I have placed.
+The templates say the earliest year is 5224 +/-4 and 4612 +/-6 cal BP.
+Pinning that year to the first ring of each file leaves the declared end year
+off by 1 and 35 years. Pinning it to the first year covered by at least two
+series (ordinals 841 and 635) makes both declared ends match exactly in both
+files, so that is the reading I used:
+
+  BRIT099  ordinal 841 = 5224 cal BP  ->  ordinal 1252 = 4813 cal BP
+  BRIT100  ordinal 635 = 4612 cal BP  ->  ordinal 1052 = 4195 cal BP
+
+ 4. Is that the intended meaning of "earliest year"? The 1 and 5 unreplicated
+    leading rings then sit before the stated date.
+
+Separately, NCEI's study records give earliestYearCE as 5224 and 4612 for
+these two - the BP values unconverted, so dates in the future. I have
+reported that to NCEI; it needs nothing from you.
+
+The pipeline is open source at https://github.com/HowardALandman/TreeRings
+if you want to check how the files are read. I would be glad to credit
+whatever you can share on the site.
+
+With thanks and best regards,
+
+Howard Landman
