@@ -74,9 +74,14 @@ async function load() {
   state.n = index.n_logs;
   index.groups.forEach((g) => state.enabled.add(g));
 
+  // Take the layout and era from the controls rather than assuming the
+  // defaults: browsers restore a <select>'s last value on reload, which left
+  // the menu saying "Packed together" over a by-taxon drawing.
+  state.mode = $('mode').value;
+  state.era = $('era').value;
+
   buildLegend();
   applyFilters();
-  resetView();
   $('loading').remove();
 
   const s = index.stats;
@@ -92,6 +97,9 @@ async function load() {
       ? `${s.logs_anchored.toLocaleString()} floating logs placed by their published calendar anchor · `
       : '') +
     `${s.logs_floating.toLocaleString()} floating logs withheld — they carry no calendar date`;
+  // No resetView() here: it fits the rows to the canvas height, and filling
+  // the footer above can wrap it and shrink the canvas by 30-70 px.  The
+  // caller resets once layout has settled.
 }
 
 /* -------------------------------------------------------------- packing */
@@ -715,6 +723,6 @@ $('theme').onclick = () => {
 window.addEventListener('resize', resize);
 new ResizeObserver(resize).observe($('stage'));
 
-load().then(resize).catch((err) => {
+load().then(() => { resize(); resetView(); }).catch((err) => {
   $('loading').textContent = 'failed to load: ' + err;
 });
