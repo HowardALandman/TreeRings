@@ -84,13 +84,18 @@ def main(argv: list[str] | None = None) -> int:
     ref = load_reference(out_csv)
     print(f"  dplR produced {len(ref)} series")
 
-    # Our logs, keyed the same way dplR keys them: (filename, series id).
+    # Our logs, keyed the same way dplR keys them: (filename, series id), and in
+    # the file's own year numbering - anchored logs are shifted onto the
+    # calendar after parsing, which dplR knows nothing about.
     file_of_site = {site: os.path.basename(p) for site, p in selected.items()}
     mine: dict[tuple[str, str], tuple[int, int]] = {}
     for log in logs:
         fname = file_of_site.get(log.site)
         if fname:
-            mine[(fname, log.series_id.strip())] = (log.first_year, log.last_year)
+            mine[(fname, log.series_id.strip())] = (
+                log.first_year - log.year_shift,
+                log.last_year - log.year_shift,
+            )
 
     both = set(ref) & set(mine)
     agree = [k for k in both if ref[k] == mine[k]]

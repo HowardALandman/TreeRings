@@ -30,7 +30,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from . import config
+from . import anchors, config
 from .rwl import Series, parse_rwl
 
 # Site codes always end in digits; anything after that is a variable suffix.
@@ -99,6 +99,7 @@ class Log:
     n_measured: int
     values: list[int | None]
     variant: str
+    precision_mm: float = 0.01  # size of one unit in ``values``, per file
     # metadata, best-effort
     species_code: str = ""
     species_name: str = ""
@@ -115,6 +116,13 @@ class Log:
     doi: str = ""
     url: str = ""
     dating: str = "absolute"
+    # For dating == "anchored": 1-sigma of the calendar position, and the
+    # depositor's statement it rests on.  See ehd/anchors.py.
+    anchor_sigma: float | None = None
+    anchor_source: str = ""
+    # Years added to the file's own year column; 0 unless anchored.  Anything
+    # comparing against the raw file (ehd.validate vs dplR) must subtract it.
+    year_shift: int = 0
 
     @property
     def n_rings(self) -> int:
@@ -131,6 +139,7 @@ class CorpusStats:
     n_files_empty: int = 0
     n_logs: int = 0
     n_floating: int = 0
+    n_anchored: int = 0
     n_disputed: int = 0
     warnings: list[str] = field(default_factory=list)
 
@@ -211,13 +220,16 @@ NOAA_FIELDS = {
 DATING_TOLERANCE_YEARS = 100
 
 # The oldest absolutely dated collection the archive declares is swed334, at
-# 5407 BC.  A declared start older than this horizon marks subfossil material
+# year -5407 (5408 BC; the years are astronomical).  A declared start older than this horizon marks subfossil material
 # whose calendar position, if it has one, was established outside the file - so
 # the file's own year column cannot be read as a calendar date.  -8000 leaves
 # ~2,600 years of margin below the oldest dated collection and ~4,300 years
 # above the Late Glacial declarations (swit195-198 at -12287, swit240 at
 # -13050) that the horizon exists to catch.
 PRE_ARCHIVE_HORIZON_CE = -8000
+
+
+DOI_RESOLVER_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.I)
 
 
 def read_noaa_header(path: str) -> dict:
@@ -239,6 +251,10 @@ def read_noaa_header(path: str) -> dict:
         if not field_name or not value.strip():
             continue
         out.setdefault(field_name, value.strip())
+    # A few templates (fra053, fra054) give the DOI as a resolver URL; the
+    # viewer prepends the resolver itself, so keep the bare name.
+    if "doi" in out:
+        out["doi"] = DOI_RESOLVER_RE.sub("", out["doi"])
     for k in ("lat", "lon"):
         if k in out:
             try:
@@ -336,8 +352,24 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
 
         variant = (split_site_variant(name) or (site, ""))[1]
         dating = classify_dating(result.series, meta)
+        series = result.series
+        shift = 0
+        anchor = anchors.ANCHORS.get(site)
+        if anchor is not None:
+            # A reviewed anchor that no longer applies is a build failure, not a
+            # fallback to "floating": either the archive changed under us or the
+            # classifier did, and both need a person to look.
+            if dating != "floating":
+                raise anchors.AnchorMismatch(
+                    f"{name}: has a calendar anchor but classifies as {dating!r}")
+            try:
+                shift = anchors.offset(series, meta, anchor)
+            except anchors.AnchorMismatch as err:
+                raise anchors.AnchorMismatch(f"{name}: {err}") from None
+            series = anchors.shift_series(series, shift)
+            dating = "anchored"
 
-        for s in result.series:
+        for s in series:
             logs.append(
                 Log(
                     key=f"{site}/{s.series_id}",
@@ -348,6 +380,7 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
                     n_measured=s.n_measured,
                     values=s.values,
                     variant=variant,
+                    precision_mm=s.precision_mm,
                     species_code=code,
                     species_name=meta.get("species_name", ""),
                     common_name=meta.get("common_name", ""),
@@ -365,9 +398,14 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
                     doi=meta.get("doi") or (api.get("doi") or ""),
                     url=meta.get("url") or (api.get("url") or ""),
                     dating=dating,
+                    anchor_sigma=anchor.sigma if anchor else None,
+                    anchor_source=anchor.source if anchor else "",
+                    year_shift=shift,
                 )
             )
-        if dating == "floating":
+        if dating == "anchored":
+            stats.n_anchored += 1
+        elif dating == "floating":
             stats.n_floating += 1
         elif dating == "disputed":
             stats.n_disputed += 1
@@ -425,8 +463,10 @@ def declares_years_bp(meta: dict) -> bool:
     NCEI 2026-08-28.
 
     The explicit ``Time_Unit`` field cannot substitute for the ordering test:
-    brit099 and brit100 say ``CE`` while carrying BP values, and the seven Late
-    Glacial collections leave it empty.
+    brit099 and brit100 say ``CE`` while carrying BP values.  The eight Late
+    Glacial collections do say BP (``cal yr BP``, or ``calendar year before
+    present`` for fra053-055); an earlier note here claimed they left it empty,
+    which was never true of the files fetched.
     """
     try:
         return int(float(meta["declared_first"])) > int(float(meta["declared_last"]))
@@ -455,6 +495,10 @@ def classify_dating(series: list[Series], meta: dict) -> str:
                     recorded as a warning for reporting upstream.
     ``unverified``  no declared span to check against.
     ``unknown``     no series.
+
+    A fifth value, ``anchored``, is never returned here: ``build_logs`` assigns
+    it to a floating collection whose calendar position is in the reviewed
+    table in ``ehd/anchors.py``, after shifting its ordinals onto the calendar.
 
     An earlier version returned ``floating`` for *any* disagreement with the
     declared span.  That conflated "the rings are numbered from 1" with "NCEI's

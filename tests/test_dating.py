@@ -142,7 +142,7 @@ def test_raw_bp_template_values_float_the_french_late_glacial():
 
     The parametrized cases above hand the classifier a span already normalised
     to CE, which exercises the pre-archive horizon.  This one hands it the
-    template's own numbers - 14378 down to 13945, no Time_Unit field - so the
+    template's own numbers - 14378 down to 13945, Time_Unit not consulted - so the
     BP inversion has to be recognised first.  Both routes must reach floating,
     because the horizon alone would not survive a Holocene-age BP declaration
     and the inversion alone would not survive a template that spelt the years

@@ -127,7 +127,10 @@ def test_hardcoded_log_count_matches_the_build():
         assert expected in text, f"expected {expected} logs, head says otherwise"
 
     # The span is hardcoded in the same sentence and drifts the same way.
-    assert f"{abs(index['year_min'])} BC" in HTML
+    # year_min is astronomical (0 = 1 BC), so the label is 1 - year_min; this
+    # used to assert abs(year_min), which pinned the off-by-one in place.
+    assert index["year_min"] <= 0
+    assert f"{1 - index['year_min']:,} BC" in HTML
     assert f"{index['year_max']} CE" in HTML
 
 

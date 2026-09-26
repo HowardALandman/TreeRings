@@ -63,11 +63,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # Floating collections number their rings from 1, so they carry no calendar
     # position.  Drawing them on the time axis would put Late Glacial pines in
-    # the Roman period, so they are held back and reported instead.
+    # the Roman period, so they are held back and reported instead.  Those with
+    # a reviewed calendar anchor (ehd/anchors.py) arrive already shifted and
+    # marked "anchored", and are plotted.
     plotted = [log for log in logs if log.dating != "floating"]
     floating = [log for log in logs if log.dating == "floating"]
+    anchored = [log for log in logs if log.dating == "anchored"]
     disputed = [log for log in logs if log.dating == "disputed"]
     print(f"  {len(plotted)} plotted, {len(floating)} withheld as floating")
+    print(f"  {len(anchored)} plotted via a calendar anchor: "
+          f"{sorted({log.site for log in anchored})}")
     print(f"  {len(disputed)} plotted with a disputed declared span")
     for site in sorted({log.site for log in disputed}):
         print(f"    {site}")
@@ -121,6 +126,11 @@ def main(argv: list[str] | None = None) -> int:
     site_records = []
     for s in sites:
         log = by_site[s]
+        # Only on the handful of anchored sites; ~2,000 nulls otherwise.
+        anchor = (
+            {"anchor_sigma": log.anchor_sigma, "anchor_source": log.anchor_source}
+            if log.dating == "anchored" else {}
+        )
         site_records.append(
             {
                 "code": s.upper(),
@@ -139,6 +149,7 @@ def main(argv: list[str] | None = None) -> int:
                 "url": log.url,
                 "dating": log.dating,
                 "variant": corpus.VARIANT_LABEL.get(log.variant, log.variant),
+                **anchor,
             }
         )
 
@@ -160,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             "logs_total": len(logs),
             "logs_plotted": len(order),
             "logs_floating": len(floating),
+            "logs_anchored": len(anchored),
             "logs_disputed": len(disputed),
             "n_sites": len(sites),
             "warnings": len(stats.warnings),
@@ -173,8 +185,14 @@ def main(argv: list[str] | None = None) -> int:
     # --- ring widths, sharded by site ---------------------------------------
     shards: dict[str, dict[str, list]] = {}
     for log in plotted:
+        # "u" is mm per unit of "v".  206 files measure in 0.001 mm; without
+        # it the viewer read every one of them as 0.01 mm, ten times too wide.
+        if log.precision_mm not in (0.01, 0.001):
+            print(f"  FAILED: {log.key} has unit {log.precision_mm} mm")
+            return 1
         shards.setdefault(log.site, {})[log.series_id] = {
             "f": log.first_year,
+            "u": log.precision_mm,
             "v": log.values,
         }
     for site, payload in shards.items():

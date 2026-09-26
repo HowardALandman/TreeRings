@@ -88,6 +88,9 @@ async function load() {
     `(${s.files_skipped_noaa.toLocaleString()} duplicate encodings, ` +
     `${s.files_skipped_variant.toLocaleString()} variant measurements skipped)`;
   $('f-provenance').textContent =
+    (s.logs_anchored
+      ? `${s.logs_anchored.toLocaleString()} floating logs placed by their published calendar anchor · `
+      : '') +
     `${s.logs_floating.toLocaleString()} floating logs withheld — they carry no calendar date`;
 }
 
@@ -151,7 +154,8 @@ const ERAS = {
   pre1000: [-Infinity, 1000],
   pre1500: [-Infinity, 1500],
   medieval: [500, 1500],
-  ancient: [-Infinity, 0],
+  ancient: [-Infinity, 0],       // astronomical 0 = 1 BC: "before 1 CE"
+  lateglacial: [-Infinity, -9999],  // astronomical -9999 = 10,000 BC
 };
 
 function applyFilters() {
@@ -321,8 +325,20 @@ const xOf = (year) => (year - state.view.xYear) * state.view.pxPerYear;
 const yOf = (row) => (row - state.view.yRow) * state.view.pxPerRow + 26;
 const yearAt = (px) => px / state.view.pxPerYear + state.view.xYear;
 
+/* Years are astronomical throughout the data, as in the Tucson files: year 0
+ * exists and is 1 BC (neth009 has a ring measured in it).  Only the label
+ * converts.  Printing -y for y < 0 put every BC label one year late and called
+ * year 0 "0 CE", a year that does not exist. */
 function fmtYear(y) {
-  return y < 0 ? `${-y} BC` : `${y} CE`;
+  return y <= 0 ? `${1 - y} BC` : `${y} CE`;
+}
+
+/* The astronomical year that a round historical label belongs at.  Tick marks
+ * step through historical numbering (..., -200, -100, 0, 100, ...) so labels
+ * read "200 BC", not "201 BC"; historical 0 does not exist and stands for
+ * 1 CE. */
+function tickYear(h) {
+  return h < 0 ? h + 1 : h === 0 ? 1 : h;
 }
 
 function draw() {
@@ -393,8 +409,8 @@ function drawTimeAxis(W, H, css) {
   ctx.strokeStyle = css.getPropertyValue('--grid').trim();
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let y = start; y <= right; y += step) {
-    const x = Math.round(xOf(y)) + 0.5;
+  for (let t = start; t <= right; t += step) {
+    const x = Math.round(xOf(tickYear(t))) + 0.5;
     ctx.moveTo(x, 22);
     ctx.lineTo(x, H);
   }
@@ -403,9 +419,10 @@ function drawTimeAxis(W, H, css) {
   ctx.fillStyle = css.getPropertyValue('--text-secondary').trim();
   ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
   ctx.textBaseline = 'middle';
-  for (let y = start; y <= right; y += step) {
+  for (let t = start; t <= right; t += step) {
+    const y = tickYear(Math.round(t));
     ctx.textAlign = 'center';
-    ctx.fillText(fmtYear(Math.round(y)), xOf(y), 11);
+    ctx.fillText(fmtYear(y), xOf(y), 11);
   }
 }
 
@@ -565,7 +582,7 @@ async function showDetail(i) {
     ['Measurement', site.variant],
     ['Collected by', site.who],
     ['ITRDB code', site.code],
-    ['Dating', datingBadge(site.dating)],
+    ['Dating', datingBadge(site)],
     ['Study', site.url ? `<a href="${esc(site.url)}" target="_blank" rel="noopener">${esc(site.study || site.code)}</a>` : esc(site.study)],
     ['DOI', site.doi ? `<a href="https://doi.org/${esc(site.doi)}" target="_blank" rel="noopener">${esc(site.doi)}</a>` : ''],
   ];
@@ -586,7 +603,12 @@ async function showDetail(i) {
   }
 }
 
-function datingBadge(d) {
+function datingBadge(site) {
+  const d = site.dating;
+  if (d === 'anchored') {
+    return '<span class="badge anchored">floating chronology, calendar-anchored ' +
+      `±${site.anchor_sigma} yr (1σ)</span><br>${esc(site.anchor_source)}`;
+  }
   if (d === 'floating') {
     return '<span class="badge floating">floating — no calendar date</span>';
   }
@@ -633,7 +655,7 @@ function drawSparkline(rec) {
   const missing = v.length - real.length;
   $('d-spark-caption').textContent =
     `ring width, ${fmtYear(rec.f)} – ${fmtYear(rec.f + v.length - 1)} · ` +
-    `peak ${(max / 100).toFixed(2)} mm` +
+    `peak ${(max * rec.u).toFixed(2)} mm` +
     (missing ? ` · ${missing} year${missing > 1 ? 's' : ''} unmeasured` : '');
 }
 

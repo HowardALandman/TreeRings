@@ -4,8 +4,9 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete.** Full pipeline runs end to end, 76,418 logs render in the
-browser, parser cross-validates against dplR at 100%.
+**Status: M1 complete.** Full pipeline runs end to end, 76,609 logs render in the
+browser (191 of them floating collections placed by their published calendar
+anchor), parser cross-validates against dplR at 100%.
 
 ## The Hohenheim question
 
@@ -21,8 +22,14 @@ inference:
 | Billamboz German Neolithic oak (GERM021–031) | averaged `.crn` chronologies only, no per-log data |
 | Belfast Irish oak | in ITRDB only from 1531 CE |
 
-The public record therefore has a ~6,800-year hole from roughly 10,800 BC to
-4,000 BC. Decision (Howard, 2026-08-17): build the prototype on public ITRDB
+The public record therefore has a hole where Hohenheim should be. Measured
+from the built payload (2026-09-26): **no log is alive between 11746 BC and
+5408 BC**, ~6,340 years. Before it, only the anchored French Late Glacial pines
+(fra053–055, 12429–11746 BC); after it, continuous coverage from swed334
+onward. The Swiss floating collections would not fill it even once anchored —
+their declared ranges sit at ~13,050–10,800 BC. (This line used to say
+"10,800 BC to 4,000 BC", which described study start dates, not log coverage.)
+Decision (Howard, 2026-08-17): build the prototype on public ITRDB
 data and pursue Hohenheim separately. The pipeline is source-agnostic, so a new
 per-log corpus drops in as another input.
 
@@ -76,12 +83,15 @@ All figures below are from the harvest and rebuild of **2026-08-28**.
 
 - 5,623 `.rwl` files listed in ITRDB `measurements/europe/`, plus 3,077
   maintained NOAA templates (`*-rwl-noaa.txt`)
-- → 2,061 files after dedup, → **76,745 logs**, 76,418 plotted
-- 327 logs withheld as floating (was 216: the live templates revealed
-  fra053–055); **0 disputed** — NCEI corrected neth005 and brit, so the class is
+- → 2,061 files after dedup, → **76,745 logs**, 76,609 plotted
+- 327 logs are floating. **191 are plotted via a reviewed calendar anchor**
+  (fra053–055, brit099/100 — see `ehd/anchors.py`, added 2026-09-26); **136
+  remain withheld** (the Swiss Late Glacial swit195–198, swit240); **0 disputed** — NCEI corrected neth005 and brit, so the class is
   now empty; 86 dated but unverifiable against metadata (was 3,464, and that
   collapse is the measure of what the frozen templates were costing)
-- Span 5407 BC – 2023 CE; 2,054 sites
+- Span 12429 BC – 2023 CE (fra053 ring 1 = 14378 cal BP); 2,056 sites. The
+  oldest *calendar-dated* collection is still swed334 at year −5407, which is
+  **5408 BC**, not 5407 BC as this file used to say — see trap 10.
 
 ## Format traps, all found in real files
 
@@ -132,9 +142,12 @@ test in `tests/`.
    old one only as a fallback for the 13 site codes that exist under no other
    name. `tests/test_templates.py` pins both vocabularies.
 
-   `Time_Unit` is present in the new template and is *not* usable: brit099 and
-   brit100 declare 5224→4813 under `Time_Unit: CE`, and the seven Late Glacial
-   collections leave it empty. Ordering remains the mechanism.
+   `Time_Unit` is present in the new template and is *not* usable on its own:
+   brit099 and brit100 declare 5224→4813 under `Time_Unit: CE`. The eight Late
+   Glacial collections do say BP (`cal yr BP`, or `calendar year before present`
+   for fra053–055). An earlier version of this note said they left it empty; that
+   was false when written — the files fetched that morning already carried it.
+   Ordering remains the mechanism because brit099/100's field is wrong.
 
    **BP, not BC — verified, not inferred from the ordering.** The question came
    up because "counts backwards" is equally true of BC, so the ordering test
@@ -166,17 +179,38 @@ test in `tests/`.
    being wrong in either direction, which it demonstrably is. What changed is
    the justification, not the test. See `tests/test_dating.py`.
 
+10. **Years are astronomical: year 0 exists and is 1 BC.** Verified in the raw
+    data, not assumed: neth009's `NWH011` has a `-10` decade line holding
+    −10…−1 followed by a `0` line holding year 0, and 80 logs across seven
+    collections have a ring in year 0. The viewer printed −y as "y BC" until
+    2026-09-26, so **every BC label on the site was one year late** and year 0
+    read "0 CE". `fmtYear` now prints 1−y; axis ticks step through historical
+    numbering (`tickYear`) so labels stay round. `tests/test_year_labels.py`
+    runs the shipped functions under node. BP converts as `1950 − BP` straight
+    into this convention (1950 BP = year 0 = 1 BC).
+
+11. **Ring-width units are per file and must reach the viewer.** 206 files
+    (6,171 logs) measure in 0.001 mm; the parser always knew (`precision_mm`),
+    but the value shards did not carry it and the viewer divided every value by
+    100, so the detail panel's "peak" read 10× too wide for all of them until
+    2026-09-26 (brit100 showed a 18.94 mm yew ring; it is 1.89). Shards now
+    carry `"u"` (mm per unit) and `emit` refuses any unit other than 0.01/0.001.
+
 ## Verification
 
-- `pytest tests/` — 89 tests: parser fixtures are the files that broke earlier
+- `pytest tests/` — 111 tests (2026-09-26); `test_anchors.py` pins each
+  calendar anchor at both ends and that the Swiss umbrella spans are refused; parser fixtures are the files that broke earlier
   parsers; `test_dating.py` pins every real collection the classifier must
   separate into absolute / floating / disputed; `test_templates.py` pins the two
   template vocabularies; `test_listing.py` pins the staleness check;
   `test_sweep.py` pins the two ways the NCEI report can produce a wrong row.
 - `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,154
   series**, 0 disagreements, 0 invariant failures, 0 series found by dplR that
-  we miss (we additionally read 11,591 series dplR cannot). Re-run 2026-08-28
-  after the template switch; unchanged.
+  we miss (we additionally read 11,591 series dplR cannot). Re-run 2026-09-26
+  after anchoring; unchanged. Anchored logs are compared in the file's own
+  numbering (`Log.year_shift` is subtracted), since dplR knows nothing of the
+  anchor. Dating classes: 76,332 absolute + 191 anchored + 86 unverified + 136
+  floating = 76,745.
 - `python -m ehd.sweep` self-checks that the ten floating collections are
   quarantined and the four corrected studies read exact, and that its own
   partition accounts for every file. It exits non-zero if not.
@@ -346,11 +380,16 @@ so the visualisation, which exists only as pixels drawn into a `<canvas>`, is
 invisible to them. Everything a shared link shows has to be static.
 
 **The log count is hardcoded in three places in `index.html`** — the meta
-description, `og:description` and `og:title` all say 76,529, and nothing checks
-them against `emit`'s actual `n_logs`. Same drift as `og.jpg` below, and the
-same fix if it ever matters: have `emit` write the head, or at minimum assert
-the number still matches. `og:title` is deliberately *not* the same string as
+description, `og:description` and `og:title` — plus the year span.
+`tests/test_link_preview.py::test_hardcoded_log_count_matches_the_build` checks
+them against the built `index.json`, so a rebuild that moves the count fails
+the suite until the head is edited by hand. `og:title` is deliberately *not* the same string as
 `og:site_name`; Facebook stacks the two and repeating the name prints it twice.
+
+**`og.jpg` is now stale in two ways (2026-09-26):** its axis labels were drawn
+by the old off-by-one `fmtYear` (one reads "0 CE"), and it predates the Late
+Glacial and Fenland logs. Recapture it; `og:image:alt` describes the old image
+and should be rewritten with it.
 
 `web/og.jpg` is **a hand-captured screenshot, not a build artifact** — 1200×630,
 the "Packed together / Before 1 CE" ladder, cropped from a 1316×906 browser
@@ -446,15 +485,48 @@ the classic overlapping-chronology ladder and the most legible entry point.
 
 ## Next
 
-- **Floating chronologies.** 327 logs across 10 collections are withheld because
-  their year column is ring ordinals: Kaiser's Daettnau pines (swit195–198, 41
-  logs), Schaub & Kaiser's Gaenziloo/Landikon (swit240, 95), Bebchuk et al.'s
-  Fenland yews (brit099/brit100, 80), and the French Late Glacial pines
-  (fra053–055, 111 — see trap 8; these were being drawn at 1–434 CE until
-  2026-08-28). Absolute offsets exist outside the files (swit195 declares
-  `-12287`, fra053 declares 14378 BP; Reinig et al. redated the Swiss Late
-  Glacial pines for IntCal20), so wiring those in would push the timeline past
-  12,000 BP. Contact: Frank Reinig (Mainz) / Ulf Büntgen (Cambridge).
+- **Floating chronologies — 191 of 327 placed 2026-09-26; 136 Swiss remain.**
+  `ehd/anchors.py` is a reviewed table, not a rule: a site gets a calendar
+  position only if a person has read the evidence, and the build *fails* unless
+  the file still reproduces the declared BP span at both ends.
+
+  | Site | Logs | Anchor | Evidence |
+  |---|---:|---|---|
+  | fra053/054/055 | 111 | ordinal 1 = `First_Year` BP, ±2.5 yr | full span = declared length exactly (434/348/233) |
+  | brit099 | 32 | ordinal 841 = 5224 BP, ±4 | replicated (depth≥2) span = 412 = declared; full span 413 misses |
+  | brit100 | 48 | ordinal 635 = 4612 BP, ±6 | replicated span = 418 = declared; full span 453 misses by 35 |
+
+  The Fenland reading is **inferred**: the depositors say "earliest year", and
+  the replicated-span reading is the one that reproduces both declared ends
+  exactly in both files. The 1 (brit099) and 5 (brit100) unreplicated leading
+  rings sit before the stated anchor. Either reading is inside the stated σ.
+
+  **The Swiss files have no per-file anchor anywhere in the archive.** All four
+  Daettnau files declare the same site-wide 14237–12750 BP; swit240 declares a
+  rounded 15000–14000 BP for 1,382 ordinals; NCEI's
+  `correlation-stats/swit196.txt` says only "Beginning year: 1". Both anchor
+  bases are refused by `anchors.offset` and pinned so in `test_anchors.py`.
+
+  Literature, as far as it got (2026-09-26):
+  - swit240's 1,382-ring span matches exactly the "floating, 1382-ring pine
+    chronology" of **Kromer et al. 2004, Radiocarbon 46(3)**, anchored by 14C
+    wiggle-match to the Cariaco varve chronology. *Plausible* identification
+    by length only; full text not reached (the Arizona repository is a
+    JS-only DSpace page, Cambridge core-reader gave the abstract only). A 2004
+    Cariaco anchor is in any case superseded by IntCal20.
+  - Schaub, Kaiser et al. (Dendrochronologia 2005, "Extension of the Swiss
+    Lateglacial tree-ring chronologies") describe Gaenziloo/Landikon floating
+    sub-chronologies (GAEALLCH_A/D, GAEYD_A), wiggle-matched to Cariaco.
+  - Reinig et al. 2020 (Radiocarbon 62(4), "Illuminating IntCal during the
+    Younger Dryas") — 13 Zurich pines, 11,950–13,160 cal BP; the PDF did not
+    extract. The current placements live in IntCal20's floating-sequence
+    data; intchron.org and intcal.org did not yield it by URL guessing.
+
+  What would settle it: IntCal20's per-sample records for the Swiss trees,
+  with ring positions and series IDs matchable to the ITRDB `DAECHAL*` /
+  swit240 IDs — or ask Frank Reinig (Mainz) / Ulf Büntgen (Cambridge) directly
+  for the IntCal20 calendar position of each ITRDB file. Uncertainty will be
+  decades, not years; the anchor table already carries σ for that.
 
 - **App title is hardcoded to Europe.** `web/index.html` and `web/app.js` both
   say "European Tree-Ring Archive". Accurate today, wrong the moment a

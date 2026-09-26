@@ -94,8 +94,22 @@ def test_missing_template_is_silent_and_empty(tmp_path):
 
 
 def test_bp_declaration_survives_the_new_vocabulary(tmp_path):
-    # fra053: no Time_Unit at all, and the years count backwards.  The ordering
-    # is the only mark, and it has to survive the field rename.
+    # fra053 with its Time_Unit line left out (the real file says "calendar
+    # year before present"): the years count backwards, and that ordering is
+    # the mark the pipeline relies on, so it has to survive the field rename.
     meta = read_template_header(write(tmp_path, "fra053", v3=V3_BP))
     assert declares_years_bp(meta)
     assert declared_span_ce(meta) == (-12428, -11995)
+
+
+def test_doi_given_as_resolver_url_is_reduced_to_the_bare_name(tmp_path):
+    # fra053's template says "DOI: https://doi.org/10.1016/..."; the viewer
+    # prepends https://doi.org/ itself, which produced a doubled, dead link.
+    from ehd.corpus import read_noaa_header
+
+    for given in ("https://doi.org/10.1016/j.quascirev.2010.07.009",
+                  "http://dx.doi.org/10.1016/j.quascirev.2010.07.009",
+                  "10.1016/j.quascirev.2010.07.009"):
+        p = tmp_path / "x-rwl-noaa.txt"
+        p.write_text(f"#   DOI: {given}\n")
+        assert read_noaa_header(str(p))["doi"] == "10.1016/j.quascirev.2010.07.009"
