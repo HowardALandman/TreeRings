@@ -4,16 +4,18 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete, map view live.** Full pipeline runs end to end,
+**Status: M1 complete, map view live (latest deploy `3f29b509`, commit
+`de73382`, 2026-10-18; verify_deploy 92/92).** Full pipeline runs end to end,
 **73,390 logs** (191 of them floating collections placed by their published
 calendar anchor), parser cross-validates against dplR at 100%. **Deployed
 2026-10-18** (commit `bcc3b53`, deployment `95753ba3.ehd-612.pages.dev`): the
 2026-10-18 rebuild plus the map view. `verify_deploy.py` 92/92; the new
 `app.js`/`style.css` match the build byte for byte; withdrawn-study shards 404.
-Since then, committed but not yet deployed to Cloudflare: `og.jpg` recaptured
-from the map, the UI changes under "Map view" (Show on map, kept selections,
-2-D wheel), and the printed-null fix. Howard checked them on localhost (Firefox, real wheel); his findings are
-fixed below.
+A second deploy the same day added: `og.jpg` recaptured from the map, the UI
+changes under "Map view" (Show on map, kept selections, 2-D wheel, bounded
+zoom-out, theme fix), and the printed-null fix. Howard checked them on
+localhost (Firefox, real wheel) first. **Facebook still needs a re-scrape** to
+show the new card (see Link previews).
 
 ## Map view (2026-10-18, first attempt, deployed)
 
@@ -71,7 +73,7 @@ Follow-ups (2026-10-18, second round, verified in Chrome by dispatched events):
 - **Timeline wheel zooms both axes** about the cursor, like the map; shift =
   rows only (as before), alt/option = time only (the old plain wheel). Each
   axis stops at its own zoom-in clamp (22 px/row, 40 px/yr), so near max zoom
-  there is a stretch of time-only zoom — Howard saw this; kept for now.
+  there is a stretch of time-only zoom — Howard saw it and chose to keep it.
   Zoom-out now stops at 0.75 × the "Reset view" fit of what is visible; the
   old absolute floors reached ±8,000,000 years on Howard's 50" screen.
 - **Theme button flips what is on screen** each click. It cycled auto → dark
