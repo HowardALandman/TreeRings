@@ -48,6 +48,7 @@ uv venv --python 3.12 && uv pip install pytest brotli   # once
 python -m ehd.fetch      # download corpus (~5,600 files) to the data root
 python -m ehd.harvest    # study metadata + corpus reconciliation report
 python -m ehd.emit       # build web/data payloads
+python -m ehd.basemap    # map outlines from Natural Earth (pinned, checksummed)
 python -m ehd.validate   # cross-check parser against dplR + invariants
 python scripts/serve.py  # view at localhost:8777
 ```

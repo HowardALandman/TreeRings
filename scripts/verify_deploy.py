@@ -66,6 +66,7 @@ PATHS = [
     ("/og.jpg", "image/jpeg"),
     ("/data/logs.bin", "application/octet-stream"),
     ("/data/index.json", "application/json"),
+    ("/data/basemap.json", "application/json"),
 ]
 
 

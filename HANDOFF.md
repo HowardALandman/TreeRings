@@ -10,13 +10,44 @@ calendar anchor), parser cross-validates against dplR at 100%. **The live site
 still shows the 2026-08-28 build (76,609)** — the 2026-10-18 rebuild is
 committed but not deployed.
 
-## Next session: user interface
+## Map view (2026-10-18, first attempt, not deployed)
 
-Howard wants to work on the UI next; the data work below resumes after. The
-map interface (first user request, deferred behind data cleanup) is the
-obvious candidate — facts for it are under "Open audit findings". Before
-deploying: recapture `og.jpg` (see Link previews) and run
-`scripts/verify_deploy.py`.
+Timeline / Map switch in the controls (`#map` in the URL restores it). One
+circle per **distinct published coordinate** (1,463), area ∝ logs passing the
+taxon + era filters, pie by taxon, largest drawn first. Hover for a tooltip;
+click for a panel listing the point's collections; "Show on timeline" (or a
+row) restricts the timeline to them, with a "Place: …" chip to clear it. The
+map ignores the place filter so every place stays clickable. Choices Howard
+made up front: exact-coordinate clusters, self-hosted outlines (no tiles),
+linked view, pies.
+
+- Base layer: `python -m ehd.basemap` → `web/data/basemap.json` (438 KB,
+  lazy-loaded on first map view). Natural Earth 1:50m v5.1.2, each file
+  SHA-256 pinned; cached under `<data root>/raw/naturalearth/`. **Must be run
+  before deploying** — emit does not build it. The clip box is far wider than
+  the corpus because a lon/lat cut shows as a false coastline (it did, at
+  32 W–62 E); zoom-out is floored at 0.75 × fit-all-points for the same reason.
+- Projection: spherical LAEA centred 52 N 10 E (the EPSG:3035 centre).
+  Verified numerically: Jacobian = R² cos φ to 1e-7 over 30–75 N, 30 W–60 E.
+- Invariant in `applyFilters`: logs in circles + unmapped = logs passing the
+  filters, else `console.error`. 3 collections (86 logs: GERM013,
+  GERM14_CORRECTED, GERM301_CORRECTED) have no coordinates; noted on the map.
+- Verified in Chrome: counts vs an independent recount (Regensburg pre-1500 =
+  43), panel refresh/close on filter change, timeline hand-off (490 logs, 42
+  sites, packing check passes), chip clear, no console errors, both themes.
+- Wheel zoom: confirmed by Howard with a real wheel in Firefox. The Chrome
+  extension's scroll sends no wheel events, so the automated check used
+  dispatched WheelEvents (anchor drift < 1 px). Those reported a wrong
+  `offsetX`, so the map's wheel uses `clientX − rect`; the timeline's wheel
+  still uses `offsetX`, with no real-user problem seen.
+- Known limits / next ideas: circles overlap heavily in the Alps at fit zoom
+  (size slider helps); 821 collections publish only 2 decimals, so one place
+  can be several neighbouring circles; no touch or keyboard support (the
+  timeline has none either); place names are "largest collection + N more"
+  (a shared-word heuristic was tried and produced "Valley, Cyprus").
+
+Before deploying: run `ehd.basemap`, recapture `og.jpg` (see Link previews),
+and run `scripts/verify_deploy.py` (now also checks `/data/basemap.json`).
 
 ## Rebuild of 2026-10-18 (committed, not deployed)
 
