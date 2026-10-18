@@ -214,6 +214,11 @@ function applyFilters() {
     keep.push(i);
   }
   state.visible = Int32Array.from(keep);
+  // A hidden log has no row, so its outline would land on row 0.
+  if (state.selected >= 0 && !state.visible.includes(state.selected)) {
+    state.selected = -1;
+    $('detail').classList.remove('open');
+  }
   state.siteCounts = siteCounts;
   state.pointCounts = pointCounts;
   state.pointTotals = new Int32Array(state.points.length);
@@ -592,25 +597,33 @@ canvas.addEventListener('mouseleave', () => {
   draw();
 });
 
+/* The wheel zooms both axes about the cursor, as on the map; shift restricts
+ * it to rows and alt (option) to time.  Each axis stops at its own clamp, so
+ * past MAX_PX_PER_ROW a plain wheel keeps zooming time alone. */
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   if (state.display === 'map') return mapWheel(e);
-  if (e.shiftKey) {
-    const before = (e.offsetY - 26) / state.view.pxPerRow + state.view.yRow;
-    state.view.pxPerRow = clamp(
-      state.view.pxPerRow * Math.pow(1.0015, -e.deltaY),
-      MIN_PX_PER_ROW, MAX_PX_PER_ROW
-    );
-    state.view.yRow = before - (e.offsetY - 26) / state.view.pxPerRow;
-  } else {
-    const before = yearAt(e.offsetX);
-    state.view.pxPerYear = clamp(
-      state.view.pxPerYear * Math.pow(1.0015, -e.deltaY), 1e-4, 40
-    );
-    state.view.xYear = before - e.offsetX / state.view.pxPerYear;
+  const [px, py] = canvasXY(e);
+  const k = Math.pow(1.0015, -e.deltaY);
+  if (!e.altKey) {
+    const before = (py - 26) / state.view.pxPerRow + state.view.yRow;
+    state.view.pxPerRow = clamp(state.view.pxPerRow * k, MIN_PX_PER_ROW, MAX_PX_PER_ROW);
+    state.view.yRow = before - (py - 26) / state.view.pxPerRow;
+  }
+  if (!e.shiftKey) {
+    const before = yearAt(px);
+    state.view.pxPerYear = clamp(state.view.pxPerYear * k, 1e-4, 40);
+    state.view.xYear = before - px / state.view.pxPerYear;
   }
   draw();
 }, { passive: false });
+
+/* From clientX, not offsetX: Chrome reported offsetX (304, 110) for a
+ * WheelEvent dispatched at canvas (608, 354). */
+function canvasXY(e) {
+  const r = canvas.getBoundingClientRect();
+  return [e.clientX - r.left, e.clientY - r.top];
+}
 
 /* -------------------------------------------------------------- tooltip */
 
@@ -625,7 +638,7 @@ function updateTooltip(i, px, py) {
   const site = siteOf(i);
   const s = state.buf[b + START], e = state.buf[b + END];
   tip.innerHTML =
-    `<div class="tt-title">${esc(site.common || site.species || 'unknown')}</div>` +
+    `<div class="tt-title">${esc(site.common || site.latin || site.species || 'unknown')}</div>` +
     `<div class="tt-years">${fmtYear(s)} – ${fmtYear(e)} · ${e - s + 1} rings</div>` +
     `<div class="tt-row">${esc(site.site)}${site.location ? ', ' + esc(site.location) : ''}</div>`;
   tip.classList.add('visible');
@@ -655,8 +668,12 @@ async function showDetail(i) {
   const s = state.buf[b + START], e = state.buf[b + END];
 
   $('d-title').textContent = seriesId;
+  const mapped = state.sitePoint[state.buf[b + SITE]] >= 0;
+  $('d-map').disabled = !mapped;
+  $('d-map').textContent = mapped ? 'Show on map' : 'No coordinates published';
+  $('d-map').onclick = () => showOnMap(i);
   $('d-sub').innerHTML =
-    `${esc(site.common || site.species)} · ${fmtYear(s)} – ${fmtYear(e)} ` +
+    `${esc(site.common || site.latin || site.species)} · ${fmtYear(s)} – ${fmtYear(e)} ` +
     `· ${e - s + 1} rings`;
 
   const rows = [
@@ -1062,10 +1079,7 @@ function mapMouseMove(e) {
 function mapWheel(e) {
   const mv = state.mapView;
   const W = canvas.clientWidth, H = canvas.clientHeight;
-  // From clientX, not offsetX: Chrome reported offsetX (304, 110) for a
-  // WheelEvent dispatched at canvas (608, 354), and the anchor drifted.
-  const r = canvas.getBoundingClientRect();
-  const px = e.clientX - r.left, py = e.clientY - r.top;
+  const [px, py] = canvasXY(e);
   // Keep the point under the cursor fixed while the scale changes.
   const x = (px - W / 2) / mv.scale + mv.cx;
   const y = (py - H / 2) / mv.scale + mv.cy;
@@ -1127,7 +1141,24 @@ function updateMapTooltip(p, px, py) {
   positionTooltip(px, py);
 }
 
-function openPlace(p) {
+/* Zoom used when jumping to one circle: 100 km per 100 px, enough to pull the
+ * Alpine clusters apart.  Never zooms out. */
+const MAP_FOCUS_SCALE = 1;
+
+function showOnMap(i) {
+  const si = state.buf[i * F + SITE];
+  const p = state.sitePoint[si];
+  if (p < 0) return;
+  setDisplay('map');
+  const mv = state.mapView, pt = state.points[p];
+  mv.scale = clamp(Math.max(mv.scale, MAP_FOCUS_SCALE), mapMinScale(), MAP_MAX_SCALE);
+  mv.cx = pt.x;
+  mv.cy = pt.y;
+  openPlace(p, si);
+}
+
+/* focusSite, if given, is the collection to mark in the list. */
+function openPlace(p, focusSite = -1) {
   state.mapSelected = p;
   const [lo, hi] = ERAS[state.era];
   const groups = state.index.groups;
@@ -1168,9 +1199,9 @@ function openPlace(p) {
     const taxa = [...r.groups]
       .map((g) => `<span class="swatch" style="background:var(--${groups[g]})"></span>`)
       .join('');
-    return `<tr data-site="${si}">` +
+    return `<tr data-site="${si}"${si === focusSite ? ' class="current"' : ''}>` +
       `<td>${esc(s.site)}<div class="code">${esc(s.code)}</div></td>` +
-      `<td>${taxa}${esc(s.common || s.species)}</td>` +
+      `<td>${taxa}${esc(s.common || s.latin || s.species)}</td>` +
       `<td class="num">${r.n.toLocaleString()}</td>` +
       `<td class="num">${fmtYear(r.lo)} –<br>${fmtYear(r.hi)}</td></tr>`;
   });
@@ -1182,7 +1213,9 @@ function openPlace(p) {
     tr.title = 'Show this collection on the timeline';
     tr.onclick = () => setPlace(new Set([si]), state.index.sites[si].site || state.index.sites[si].code);
   }
-  $('place').classList.add('open');
+  if (state.display === 'map') $('place').classList.add('open');
+  const cur = $('p-table').querySelector('tr.current');
+  if (cur) cur.scrollIntoView({ block: 'nearest' });
   draw();
 }
 
@@ -1206,8 +1239,8 @@ function setPlace(sites, label) {
   state.place = { sites, label };
   $('place-chip').textContent = `Place: ${label}`;
   $('place-chip').hidden = false;
+  applyFilters();  // first, so a selection outside the place is dropped before it can reopen
   setDisplay('timeline');
-  applyFilters();
   resetView();
 }
 
@@ -1220,7 +1253,7 @@ function clearPlace() {
 }
 
 const HELP = {
-  timeline: 'Drag to pan · wheel to zoom time · shift+wheel to zoom rows',
+  timeline: 'Drag to pan · wheel to zoom · shift+wheel rows only · alt+wheel time only',
   map: 'Drag to pan · wheel to zoom · circle area proportional to logs · click a circle for its collections',
 };
 
@@ -1239,10 +1272,9 @@ function setDisplay(d) {
   syncDisplayControls();
   state.hover = state.mapHover = -1;
   $('tooltip').classList.remove('visible');
-  $('detail').classList.remove('open');
-  state.selected = -1;
-  $('place').classList.remove('open');
-  state.mapSelected = -1;
+  // Each view keeps its own selection across a switch; only its panel hides.
+  $('detail').classList.toggle('open', d === 'timeline' && state.selected >= 0);
+  $('place').classList.toggle('open', d === 'map' && state.mapSelected >= 0);
   try {
     history.replaceState(null, '', d === 'map' ? '#map' : location.pathname + location.search);
   } catch (err) { /* file:// and sandboxed frames refuse; the hash is a convenience */ }

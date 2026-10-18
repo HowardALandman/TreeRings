@@ -285,6 +285,14 @@ class SpanDefectStale(Exception):
 DOI_RESOLVER_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.I)
 
 
+# NCEI's maintained templates print a missing value as Python would:
+# "Elevation_m: None" (138 collections), "Elevation_m: nan" (6),
+# "Common_Name: None" (2), counted 2026-10-18.  Read literally, the viewer
+# showed "Elevation None m" and a tree called "None".  "NA" is left out on
+# purpose: it never occurs here and is a plausible real abbreviation.
+NULL_VALUES = {"", "none", "nan", "null"}
+
+
 def read_noaa_header(path: str) -> dict:
     """Parse the ``#``-commented NOAA template header for metadata."""
     out: dict = {}
@@ -301,7 +309,7 @@ def read_noaa_header(path: str) -> dict:
             continue
         key, _, value = line.partition(":")
         field_name = NOAA_FIELDS.get(key.strip())
-        if not field_name or not value.strip():
+        if not field_name or value.strip().lower() in NULL_VALUES:
             continue
         out.setdefault(field_name, value.strip())
     # A few templates (fra053, fra054) give the DOI as a resolver URL; the

@@ -26,7 +26,7 @@
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Thousands of coloured bars, one per tree log, packed into rows across a time axis from 5000 BC to 0 CE; overlapping runs of pine, oak and spruce form a descending ladder.">
+<meta property="og:image:alt" content="Map of Europe with 1,463 circles, one per tree-ring sampling location, sized by number of logs and coloured by taxon: pine across Scandinavia, Iberia and the eastern Mediterranean, oak across Britain, Ireland and the north European plain, and spruce, fir and mixed pies packed into the Alps.">
 <meta name="twitter:card" content="summary_large_image">
 
 <link rel="icon" href="/favicon.ico" sizes="32x32">
@@ -92,6 +92,7 @@
       <button class="close" id="detail-close" aria-label="Close">×</button>
       <h2 id="d-title">—</h2>
       <div class="sub" id="d-sub"></div>
+      <button id="d-map">Show on map</button>
       <canvas id="spark"></canvas>
       <div class="spark-caption" id="d-spark-caption"></div>
       <dl id="d-fields"></dl>
@@ -111,7 +112,7 @@
   <footer>
     <span id="f-counts"></span>
     <span id="f-provenance"></span>
-    <span id="f-help">Drag to pan · wheel to zoom time · shift+wheel to zoom rows</span>
+    <span id="f-help">Drag to pan · wheel to zoom · shift+wheel rows only · alt+wheel time only</span>
   </footer>
 
 </div>

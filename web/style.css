@@ -250,6 +250,9 @@ canvas.panning { cursor: grabbing; }
 #p-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 #p-table tbody tr { cursor: pointer; }
 #p-table tbody tr:hover { background: var(--surface-3); }
+/* The collection of the log that "Show on map" came from. */
+#p-table tbody tr.current { background: var(--surface-3); box-shadow: inset 3px 0 0 var(--text-primary); }
+button:disabled { cursor: default; opacity: 0.55; }
 #p-table .code { color: var(--text-muted); font-size: 11px; }
 #p-table .swatch {
   display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px;

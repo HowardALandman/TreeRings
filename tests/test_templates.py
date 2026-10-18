@@ -113,3 +113,16 @@ def test_doi_given_as_resolver_url_is_reduced_to_the_bare_name(tmp_path):
         p = tmp_path / "x-rwl-noaa.txt"
         p.write_text(f"#   DOI: {given}\n")
         assert read_noaa_header(str(p))["doi"] == "10.1016/j.quascirev.2010.07.009"
+
+
+def test_printed_nulls_are_missing_values(tmp_path):
+    # NCEI's templates write "Elevation_m: None" / "nan" and "Common_Name: None";
+    # the viewer displayed them as "Elevation None m" and a taxon named "None".
+    from ehd.corpus import read_noaa_header
+
+    for given in ("None", "nan", "NaN", "null", ""):
+        p = tmp_path / "x-rwl-noaa.txt"
+        p.write_text(f"#   Elevation_m: {given}\n#   Common_Name: {given}\n#   Site_Name: Jura\n")
+        meta = read_noaa_header(str(p))
+        assert "elevation" not in meta and "common_name" not in meta, given
+        assert meta["site_name"] == "Jura"

@@ -10,7 +10,9 @@ calendar anchor), parser cross-validates against dplR at 100%. **Deployed
 2026-10-18** (commit `bcc3b53`, deployment `95753ba3.ehd-612.pages.dev`): the
 2026-10-18 rebuild plus the map view. `verify_deploy.py` 92/92; the new
 `app.js`/`style.css` match the build byte for byte; withdrawn-study shards 404.
-`og.jpg` was **not** recaptured and is still stale (see Link previews).
+Since then, committed but not yet deployed to Cloudflare: `og.jpg` recaptured
+from the map, the UI changes under "Map view" (Show on map, kept selections,
+2-D wheel), and the printed-null fix. Howard is checking them on localhost.
 
 ## Map view (2026-10-18, first attempt, deployed)
 
@@ -55,7 +57,24 @@ would have been deployed. `emit.stale_shards()` now deletes them, and
 
 Before each deploy: run `ehd.basemap` (emit does not build it) and afterwards
 `scripts/verify_deploy.py` (now also checks `/data/basemap.json`).
-Still to do: recapture `og.jpg` (see Link previews) — perhaps with the map.
+Follow-ups (2026-10-18, second round, verified in Chrome by dispatched events):
+
+- **Show on map** button in a log's detail panel: centres the map on its circle
+  (zooming in to at least 1 px/km, never out), opens the place panel and marks
+  the log's collection. Disabled ("No coordinates published") for unmapped logs.
+- **Selections survive switching views**: each view keeps its own selection
+  and only hides its panel. A timeline selection is dropped when a filter hides
+  the log — which also fixes an older bug: a hidden selected log had no row
+  and was outlined at row 0.
+- **Timeline wheel zooms both axes** about the cursor, like the map; shift =
+  rows only (as before), alt/option = time only (the old plain wheel). Each
+  axis stops at its own clamp. Real-wheel feel not yet tried by Howard.
+- **Printed nulls in NCEI templates** are now missing values
+  (`corpus.NULL_VALUES`): `Elevation_m: None` (138 collections) / `nan` (6) had
+  shown as "Elevation None m", and `Common_Name: None` (AUST115, TURK008) as a
+  tree called "None"; those two now show their Latin name. Rebuild diff: only
+  `index.json` changed, exactly those 146 field values. Upstream defect —
+  candidate for the next NCEI mail.
 
 ## Rebuild of 2026-10-18 (deployed 2026-10-18)
 
@@ -549,24 +568,26 @@ them against the built `index.json`, so a rebuild that moves the count fails
 the suite until the head is edited by hand. `og:title` is deliberately *not* the same string as
 `og:site_name`; Facebook stacks the two and repeating the name prints it twice.
 
-**`og.jpg` is now stale in two ways (2026-09-26):** its axis labels were drawn
-by the old off-by-one `fmtYear` (one reads "0 CE"), and it predates the Late
-Glacial and Fenland logs. Recapture it; `og:image:alt` describes the old image
-and should be rewritten with it.
-
-`web/og.jpg` is **a hand-captured screenshot, not a build artifact** — 1200×630,
-the "Packed together / Before 1 CE" ladder, cropped from a 1316×906 browser
-capture and scaled with `ffmpeg`. It is committed because nothing regenerates
-it, and it will drift from the data as the corpus changes. To recapture: open
-the site, set Layout "Packed together" and Era "Before 1 CE", screenshot the
-viewport, then
+`web/og.jpg` is **a captured screenshot, not a build artifact** — 1200×630,
+the map view at "Reset view", dark theme (recaptured 2026-10-18; the previous
+card was the "Before 1 CE" ladder, stale since the `fmtYear` fix). It is
+committed because nothing regenerates it, and it drifts from the data as the
+corpus changes; rewrite `og:image:alt` with it. To recapture, with
+`scripts/serve.py` running:
 
 ```bash
-ffmpeg -i shot.jpg -vf "crop=1316:691:0:0,scale=1200:630:flags=lanczos" -q:v 3 web/og.jpg
+CH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+"$CH" --headless=new --disable-gpu --hide-scrollbars --user-data-dir=<scratch> \
+  --window-size=1600,903 --virtual-time-budget=8000 --force-device-scale-factor=1 \
+  --screenshot=shot.png "http://localhost:8777/#map"
+ffmpeg -i shot.png -vf "crop=1600:840:0:0,scale=1200:630:flags=lanczos" -q:v 3 web/og.jpg
 ```
 
-The 691 is whatever height gives 1.91:1 at the capture's width; the crop is from
-the top so the title, taxon legend and time axis stay in frame. Rendering this
+Headless Chrome follows the system theme (dark here). 840 is 1600/1.905; the
+window height 903 puts the footer's top border at exactly y=840, so the map is
+fitted to the canvas that ends at the crop line. Measured, not assumed: the
+footer is 63 px at 1600 wide (two lines) — if it wraps differently, re-measure
+or the map is fitted to a canvas taller than the card. Rendering this
 in the pipeline instead was considered and deferred — it would need the taxon
 palette duplicated from `app.js` into Python, which is a second source of truth
 for the one thing HANDOFF says not to change without re-running the validator.
