@@ -4,13 +4,15 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete.** Full pipeline runs end to end, **73,390 logs** in the
-local build (191 of them floating collections placed by their published
-calendar anchor), parser cross-validates against dplR at 100%. **The live site
-still shows the 2026-08-28 build (76,609)** — the 2026-10-18 rebuild is
-committed but not deployed.
+**Status: M1 complete, map view live.** Full pipeline runs end to end,
+**73,390 logs** (191 of them floating collections placed by their published
+calendar anchor), parser cross-validates against dplR at 100%. **Deployed
+2026-10-18** (commit `bcc3b53`, deployment `95753ba3.ehd-612.pages.dev`): the
+2026-10-18 rebuild plus the map view. `verify_deploy.py` 92/92; the new
+`app.js`/`style.css` match the build byte for byte; withdrawn-study shards 404.
+`og.jpg` was **not** recaptured and is still stale (see Link previews).
 
-## Map view (2026-10-18, first attempt, not deployed)
+## Map view (2026-10-18, first attempt, deployed)
 
 Timeline / Map switch in the controls (`#map` in the URL restores it). One
 circle per **distinct published coordinate** (1,463), area ∝ logs passing the
@@ -51,10 +53,11 @@ longer wrote, so the 25 withdrawn studies' ring widths were still in `web/` and
 would have been deployed. `emit.stale_shards()` now deletes them, and
 `tests/test_stale_shards.py` requires `values/` to match the index exactly.
 
-Before deploying: run `ehd.basemap`, recapture `og.jpg` (see Link previews),
-and run `scripts/verify_deploy.py` (now also checks `/data/basemap.json`).
+Before each deploy: run `ehd.basemap` (emit does not build it) and afterwards
+`scripts/verify_deploy.py` (now also checks `/data/basemap.json`).
+Still to do: recapture `og.jpg` (see Link previews) — perhaps with the map.
 
-## Rebuild of 2026-10-18 (committed, not deployed)
+## Rebuild of 2026-10-18 (deployed 2026-10-18)
 
 `fetch --templates --refresh`, `harvest`, `emit`, `validate`, `sweep` all run.
 pytest 139 passed.
