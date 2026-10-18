@@ -46,6 +46,11 @@ linked view, pies.
   timeline has none either); place names are "largest collection + N more"
   (a shared-word heuristic was tried and produced "Valley, Cyprus").
 
+**Stale shards fixed (2026-10-18):** `emit` never removed `values/` shards it no
+longer wrote, so the 25 withdrawn studies' ring widths were still in `web/` and
+would have been deployed. `emit.stale_shards()` now deletes them, and
+`tests/test_stale_shards.py` requires `values/` to match the index exactly.
+
 Before deploying: run `ehd.basemap`, recapture `og.jpg` (see Link previews),
 and run `scripts/verify_deploy.py` (now also checks `/data/basemap.json`).
 

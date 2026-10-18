@@ -55,6 +55,20 @@ def withdrawal_problems(logs: list[corpus.Log]) -> list[str]:
     ]
 
 
+def stale_shards(values_dir: str, written: set[str]) -> list[str]:
+    """Shard files in values/ that this build did not write.
+
+    Shards are overwritten in place, so a site that leaves the build - a study
+    NCEI withdrew, say - would otherwise keep its old shard, and every deploy
+    of web/ would go on serving its ring widths.  The 2026-10-18 rebuild left
+    exactly the 25 withdrawn studies behind this way.
+    """
+    return sorted(
+        f for f in os.listdir(values_dir)
+        if f.endswith(".json") and f[: -len(".json")] not in written
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     web_data = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "data"
@@ -232,13 +246,17 @@ def main(argv: list[str] | None = None) -> int:
     for site, payload in shards.items():
         with open(os.path.join(web_data, "values", f"{site}.json"), "w") as fh:
             json.dump(payload, fh, separators=(",", ":"))
+    stale = stale_shards(os.path.join(web_data, "values"), set(shards))
+    for f in stale:
+        os.remove(os.path.join(web_data, "values", f))
 
     print(f"\nwrote {web_data}")
     print(f"  logs.bin    {bin_br / 1e6:.2f} MB br  ({bin_raw / 1e6:.2f} MB raw,"
           f" {bin_raw / bin_br:.2f}x)")
     print(f"  index.json  {index_br / 1e6:.2f} MB br  ({index_raw / 1e6:.2f} MB raw,"
           f" {index_raw / index_br:.2f}x)")
-    print(f"  values/     {len(shards)} shards, uncompressed")
+    print(f"  values/     {len(shards)} shards, uncompressed"
+          + (f"; removed {len(stale)} stale: {', '.join(stale)}" if stale else ""))
     print(f"  first paint {(bin_br + index_br) / 1e6:.2f} MB over the wire")
     return 0
 
