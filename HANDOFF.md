@@ -12,7 +12,8 @@ calendar anchor), parser cross-validates against dplR at 100%. **Deployed
 `app.js`/`style.css` match the build byte for byte; withdrawn-study shards 404.
 Since then, committed but not yet deployed to Cloudflare: `og.jpg` recaptured
 from the map, the UI changes under "Map view" (Show on map, kept selections,
-2-D wheel), and the printed-null fix. Howard is checking them on localhost.
+2-D wheel), and the printed-null fix. Howard checked them on localhost (Firefox, real wheel); his findings are
+fixed below.
 
 ## Map view (2026-10-18, first attempt, deployed)
 
@@ -62,13 +63,19 @@ Follow-ups (2026-10-18, second round, verified in Chrome by dispatched events):
 - **Show on map** button in a log's detail panel: centres the map on its circle
   (zooming in to at least 1 px/km, never out), opens the place panel and marks
   the log's collection. Disabled ("No coordinates published") for unmapped logs.
-- **Selections survive switching views**: each view keeps its own selection
-  and only hides its panel. A timeline selection is dropped when a filter hides
-  the log — which also fixes an older bug: a hidden selected log had no row
-  and was outlined at row 0.
+- **Selections survive switching views and filters**: each view keeps its own
+  selection and only hides its panel; a selection a filter hides (taxon, era,
+  place) comes back when the filter is undone (`state.selectedHidden`, and a
+  kept `mapSelected` whose circle is empty). Also fixes an older bug: a hidden
+  selected log had no row and was outlined at row 0.
 - **Timeline wheel zooms both axes** about the cursor, like the map; shift =
   rows only (as before), alt/option = time only (the old plain wheel). Each
-  axis stops at its own clamp. Real-wheel feel not yet tried by Howard.
+  axis stops at its own zoom-in clamp (22 px/row, 40 px/yr), so near max zoom
+  there is a stretch of time-only zoom — Howard saw this; kept for now.
+  Zoom-out now stops at 0.75 × the "Reset view" fit of what is visible; the
+  old absolute floors reached ±8,000,000 years on Howard's 50" screen.
+- **Theme button flips what is on screen** each click. It cycled auto → dark
+  → light, so under a dark system theme leaving dark took two clicks.
 - **Printed nulls in NCEI templates** are now missing values
   (`corpus.NULL_VALUES`): `Elevation_m: None` (138 collections) / `nan` (6) had
   shown as "Elevation None m", and `Common_Name: None` (AUST115, TURK008) as a

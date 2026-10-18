@@ -45,6 +45,8 @@ const state = {
   mapView: { cx: 0, cy: 0, scale: 0.001, fitted: false },
   mapHover: -1,
   mapSelected: -1,
+  mapFocus: -1,       // collection to mark in the place panel ("Show on map")
+  selectedHidden: false,  // the timeline selection is filtered out
   sizeK: 1.2,         // px of radius per sqrt(log)
 };
 
@@ -214,11 +216,10 @@ function applyFilters() {
     keep.push(i);
   }
   state.visible = Int32Array.from(keep);
-  // A hidden log has no row, so its outline would land on row 0.
-  if (state.selected >= 0 && !state.visible.includes(state.selected)) {
-    state.selected = -1;
-    $('detail').classList.remove('open');
-  }
+  // A filtered-out selection is hidden, not dropped, so it comes back with
+  // the filter.  It has no row while hidden: its outline would land on row 0.
+  state.selectedHidden = state.selected >= 0 && !state.visible.includes(state.selected);
+  $('detail').classList.toggle('open', state.display === 'timeline' && selectionShown());
   state.siteCounts = siteCounts;
   state.pointCounts = pointCounts;
   state.pointTotals = new Int32Array(state.points.length);
@@ -346,6 +347,10 @@ function computeBandOffsets() {
   state.bandOffsets = offs;
 }
 
+function selectionShown() {
+  return state.selected >= 0 && !state.selectedHidden;
+}
+
 function rowOf(i) {
   if (state.rows) {
     const r = state.rows[i];
@@ -375,8 +380,8 @@ function resize() {
   draw();
 }
 
-function resetView() {
-  if (state.display === 'map') return resetMapView();
+/* The "Reset view" framing of what the filters leave visible. */
+function timelineFit() {
   const r = canvas.getBoundingClientRect();
   let lo = state.index.year_min, hi = state.index.year_max;
   if (state.visible && state.visible.length) {
@@ -388,14 +393,25 @@ function resetView() {
     }
   }
   const pad = Math.max(20, (hi - lo) * 0.02);
-  state.view.xYear = lo - pad;
-  state.view.pxPerYear = r.width / (hi - lo + pad * 2);
+  return {
+    xYear: lo - pad,
+    pxPerYear: r.width / (hi - lo + pad * 2),
+    pxPerRow: clamp((r.height - 34) / Math.max(state.rowCount, 1), MIN_PX_PER_ROW, MAX_PX_PER_ROW),
+  };
+}
+
+/* Zooming out stops a little past the fitted view, as on the map.  The old
+ * absolute floors (1e-4 px/yr, MIN_PX_PER_ROW) let a 50" screen reach
+ * 8,000,000 BC - 8,000,000 CE with the whole corpus 1.5" tall. */
+const ZOOM_OUT_LIMIT = 0.75;
+
+function resetView() {
+  if (state.display === 'map') return resetMapView();
+  const fit = timelineFit();
+  state.view.xYear = fit.xYear;
+  state.view.pxPerYear = fit.pxPerYear;
   state.view.yRow = 0;
-  state.view.pxPerRow = clamp(
-    (r.height - 34) / Math.max(state.rowCount, 1),
-    MIN_PX_PER_ROW,
-    MAX_PX_PER_ROW
-  );
+  state.view.pxPerRow = fit.pxPerRow;
   draw();
 }
 
@@ -458,7 +474,7 @@ function draw() {
 
   drawBandLabels(W, H, css);
   if (state.hover >= 0) outline(state.hover, css, 1.5);
-  if (state.selected >= 0) outline(state.selected, css, 2.5);
+  if (selectionShown()) outline(state.selected, css, 2.5);
 }
 
 function outline(i, css, width) {
@@ -605,14 +621,17 @@ canvas.addEventListener('wheel', (e) => {
   if (state.display === 'map') return mapWheel(e);
   const [px, py] = canvasXY(e);
   const k = Math.pow(1.0015, -e.deltaY);
+  const fit = timelineFit();
   if (!e.altKey) {
     const before = (py - 26) / state.view.pxPerRow + state.view.yRow;
-    state.view.pxPerRow = clamp(state.view.pxPerRow * k, MIN_PX_PER_ROW, MAX_PX_PER_ROW);
+    state.view.pxPerRow = clamp(
+      state.view.pxPerRow * k, Math.min(ZOOM_OUT_LIMIT * fit.pxPerRow, MAX_PX_PER_ROW), MAX_PX_PER_ROW
+    );
     state.view.yRow = before - (py - 26) / state.view.pxPerRow;
   }
   if (!e.shiftKey) {
     const before = yearAt(px);
-    state.view.pxPerYear = clamp(state.view.pxPerYear * k, 1e-4, 40);
+    state.view.pxPerYear = clamp(state.view.pxPerYear * k, ZOOM_OUT_LIMIT * fit.pxPerYear, 40);
     state.view.xYear = before - px / state.view.pxPerYear;
   }
   draw();
@@ -661,6 +680,7 @@ const esc = (s) =>
 
 async function showDetail(i) {
   state.selected = i;
+  state.selectedHidden = false;
   draw();
   const b = i * F;
   const site = siteOf(i);
@@ -1160,6 +1180,7 @@ function showOnMap(i) {
 /* focusSite, if given, is the collection to mark in the list. */
 function openPlace(p, focusSite = -1) {
   state.mapSelected = p;
+  state.mapFocus = focusSite;
   const [lo, hi] = ERAS[state.era];
   const groups = state.index.groups;
   // Per collection: the taxon and year span of the logs the circle counts.
@@ -1219,12 +1240,18 @@ function openPlace(p, focusSite = -1) {
   draw();
 }
 
-/* Filters changed under an open place panel: recount it, or close it if the
- * filters have emptied the circle it describes. */
+/* Filters changed under a place selection: recount its panel, or hide it
+ * while the filters empty its circle - kept, like a hidden timeline
+ * selection, so it comes back when the filter is undone. */
 function refreshPlace() {
   const p = state.mapSelected;
   if (p < 0) return;
-  if (state.pointTotals[p] > 0) openPlace(p); else closePlace();
+  if (state.pointTotals[p] > 0) {
+    openPlace(p, state.mapFocus);
+  } else {
+    $('place').classList.remove('open');
+    draw();
+  }
 }
 
 function closePlace() {
@@ -1239,7 +1266,7 @@ function setPlace(sites, label) {
   state.place = { sites, label };
   $('place-chip').textContent = `Place: ${label}`;
   $('place-chip').hidden = false;
-  applyFilters();  // first, so a selection outside the place is dropped before it can reopen
+  applyFilters();  // first, so a selection outside the place is hidden before it can reopen
   setDisplay('timeline');
   resetView();
 }
@@ -1273,8 +1300,10 @@ function setDisplay(d) {
   state.hover = state.mapHover = -1;
   $('tooltip').classList.remove('visible');
   // Each view keeps its own selection across a switch; only its panel hides.
-  $('detail').classList.toggle('open', d === 'timeline' && state.selected >= 0);
-  $('place').classList.toggle('open', d === 'map' && state.mapSelected >= 0);
+  $('detail').classList.toggle('open', d === 'timeline' && selectionShown());
+  $('place').classList.toggle(
+    'open', d === 'map' && state.mapSelected >= 0 && state.pointTotals[state.mapSelected] > 0
+  );
   try {
     history.replaceState(null, '', d === 'map' ? '#map' : location.pathname + location.search);
   } catch (err) { /* file:// and sandboxed frames refuse; the hash is a convenience */ }
@@ -1333,11 +1362,17 @@ $('place-chip').onclick = clearPlace;
 $('place-close').onclick = closePlace;
 $('reset').onclick = resetView;
 $('detail-close').onclick = closeDetail;
+/* Every click flips the theme on screen.  It used to cycle auto -> dark ->
+ * light, and under a dark system theme auto -> dark changed nothing, so
+ * leaving dark took two clicks.  Choosing what the system already shows drops
+ * the override, so the page goes back to following the system. */
 $('theme').onclick = () => {
-  const cur = document.documentElement.getAttribute('data-theme');
-  const next = cur === 'dark' ? 'light' : cur === 'light' ? '' : 'dark';
-  if (next) document.documentElement.setAttribute('data-theme', next);
-  else document.documentElement.removeAttribute('data-theme');
+  const root = document.documentElement;
+  const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const shown = root.getAttribute('data-theme') || (sysDark ? 'dark' : 'light');
+  const next = shown === 'dark' ? 'light' : 'dark';
+  if ((next === 'dark') === sysDark) root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', next);
   draw();
 };
 
