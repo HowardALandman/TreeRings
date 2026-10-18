@@ -39,6 +39,22 @@ def group_of(log: corpus.Log) -> str:
     return log.group if log.group in GROUP_ORDER else "other"
 
 
+def withdrawal_problems(logs: list[corpus.Log]) -> list[str]:
+    """Known-withdrawn collections that the build would plot.
+
+    A collection absent from the corpus is fine - NCEI may yet delete the file.
+    One present but not marked withdrawn means the harvest stopped seeing the
+    removal notes, and every withdrawn study would be back on screen.
+    """
+    present = {log.site for log in logs}
+    live = {log.site for log in logs if not log.withdrawn}
+    return [
+        f"{site}: NCEI withdrew this study but it is not marked withdrawn - "
+        "re-run `python -m ehd.harvest` and check its withdrawal report"
+        for site in sorted(corpus.KNOWN_WITHDRAWN & present & live)
+    ]
+
+
 def main(argv: list[str] | None = None) -> int:
     web_data = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "data"
@@ -66,10 +82,26 @@ def main(argv: list[str] | None = None) -> int:
     # the Roman period, so they are held back and reported instead.  Those with
     # a reviewed calendar anchor (ehd/anchors.py) arrive already shifted and
     # marked "anchored", and are plotted.
-    plotted = [log for log in logs if log.dating != "floating"]
-    floating = [log for log in logs if log.dating == "floating"]
-    anchored = [log for log in logs if log.dating == "anchored"]
-    disputed = [log for log in logs if log.dating == "disputed"]
+    # Withdrawn studies are ones NCEI has taken back - most for failing its
+    # crossdating standard, so their years may be ring counts - while leaving
+    # the files in the directory.  Parsed (ehd.validate still checks them) but
+    # never drawn.
+    withdrawn = [log for log in logs if log.withdrawn]
+    problems = withdrawal_problems(logs)
+    for p in problems:
+        print(f"  FAILED: {p}")
+    if problems:
+        return 1
+    for site in sorted({log.site for log in withdrawn} - corpus.KNOWN_WITHDRAWN):
+        print(f"  newly withdrawn, not yet in KNOWN_WITHDRAWN: {site}")
+
+    live = [log for log in logs if not log.withdrawn]
+    plotted = [log for log in live if log.dating != "floating"]
+    floating = [log for log in live if log.dating == "floating"]
+    anchored = [log for log in live if log.dating == "anchored"]
+    disputed = [log for log in live if log.dating == "disputed"]
+    print(f"  {len(withdrawn)} withheld as withdrawn by NCEI, from "
+          f"{len({log.site for log in withdrawn})} collections")
     print(f"  {len(plotted)} plotted, {len(floating)} withheld as floating")
     print(f"  {len(anchored)} plotted via a calendar anchor: "
           f"{sorted({log.site for log in anchored})}")
@@ -173,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
             "logs_floating": len(floating),
             "logs_anchored": len(anchored),
             "logs_disputed": len(disputed),
+            "logs_withdrawn": len(withdrawn),
+            "sites_withdrawn": len({log.site for log in withdrawn}),
             "n_sites": len(sites),
             "warnings": len(stats.warnings),
         },

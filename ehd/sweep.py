@@ -36,14 +36,15 @@ import csv
 import glob
 import json
 import os
-import re
 import sys
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from . import config, fetch
+from .harvest import study_id_from_files
 from .corpus import (
+    REVIEWED_SPAN_DEFECTS,
     CorpusStats,
     classify_dating,
     declared_span_ce,
@@ -57,8 +58,6 @@ from .rwl import parse_rwl
 # Plausible calendar years for the archive.  Used only to reject garbage when
 # reading the legacy Tucson header, whose layout is not reliably parseable.
 YEAR_MIN, YEAR_MAX = -14000, 2100
-
-STUDY_ID_RE = re.compile(r"/(?:paleo/)?study/(\d+)")
 
 
 @dataclass
@@ -79,6 +78,7 @@ class Row:
     cls: str = "no record span"
     floating: bool = False  # year column is ring ordinals - do not "correct"
     explained_by: str = ""  # a sibling file the declared span does describe
+    withdrawn: str = ""  # NCEI's removal statement; nothing to correct
     note: str = ""
 
     @property
@@ -140,37 +140,23 @@ def header_span(path: str) -> tuple[int, int] | None:
     return first, last
 
 
-def template_span(path: str) -> tuple[int, int] | None:
+def template_span(path: str, site: str = "") -> tuple[int, int] | None:
     """Declared span from one specific template file.
 
     Deliberately not ``read_template_header``, which merges the two families:
     the report needs to say what the *maintained* template says, since that is
     the file NCEI edits.  Normalisation is the shared one, so a BP declaration
-    is read the same way here as in the pipeline.
+    is read the same way here as in the pipeline - including a site the
+    pipeline reads as CE by review (``REVIEWED_SPAN_DEFECTS``), whose raw pair
+    is reported as written rather than converted from BP.
     """
-    return declared_span_ce(read_noaa_header(path))
-
-
-def study_id_from_files(raw_dir: str, site: str) -> str:
-    """Recover a study id from a file's own template header.
-
-    This is the escape hatch for the API's unreliable continent filter: the
-    template names its study's landing page, so a study the filter hid is still
-    reachable by id.
-    """
-    for suffix in ("-rwl-noaa.txt", "-noaa.rwl", ".rwl"):
-        path = os.path.join(raw_dir, site + suffix)
-        if not os.path.exists(path):
-            continue
+    header = read_noaa_header(path)
+    if site in REVIEWED_SPAN_DEFECTS:
         try:
-            with open(path, "rb") as fh:
-                blob = fh.read(20000).decode("utf-8", errors="replace")
-        except OSError:
-            continue
-        m = STUDY_ID_RE.search(blob)
-        if m:
-            return m.group(1)
-    return ""
+            return int(float(header["declared_first"])), int(float(header["declared_last"]))
+        except (KeyError, TypeError, ValueError):
+            return None
+    return declared_span_ce(header)
 
 
 def fetch_study_span(study_id: str) -> tuple[int, int] | None:
@@ -191,7 +177,7 @@ def fetch_study_span(study_id: str) -> tuple[int, int] | None:
     return None
 
 
-def is_floating(series, path: str, declared: tuple[int, int] | None) -> bool:
+def is_floating(series, path: str, declared: tuple[int, int] | None, site: str = "") -> bool:
     """Whether the pipeline reads this file's year column as ring ordinals.
 
     Delegated to ``corpus.classify_dating`` so the sweep and the visualisation
@@ -204,7 +190,7 @@ def is_floating(series, path: str, declared: tuple[int, int] | None) -> bool:
     meta = read_template_header(path)
     if "declared_first" not in meta and declared is not None:
         meta = {"declared_first": declared[0], "declared_last": declared[1]}
-    return classify_dating(series, meta) == "floating"
+    return classify_dating(series, meta, site) == "floating"
 
 
 def measured_spans(paths: list[str]) -> dict[str, tuple[int, int]]:
@@ -288,6 +274,7 @@ def build_rows(raw_dir: str | None = None) -> list[Row]:
             study_id=str(api.get("study_id") or ""),
             study_code=api.get("study_code") or "",
             study_name=api.get("study_name") or "",
+            withdrawn=api.get("withdrawn") or "",
         )
         result = parse_rwl(path)
         if result.series:
@@ -304,12 +291,12 @@ def build_rows(raw_dir: str | None = None) -> list[Row]:
             row.declared = (int(first), int(last))
 
         stem = name[: -len(".rwl")]
-        row.template = template_span(os.path.join(raw_dir, stem + "-rwl-noaa.txt"))
+        row.template = template_span(os.path.join(raw_dir, stem + "-rwl-noaa.txt"), site)
         row.header = header_span(path)
 
         if row.measured and row.declared:
             row.cls = classify_span(row.measured, row.declared)
-        row.floating = is_floating(result.series, path, row.declared)
+        row.floating = is_floating(result.series, path, row.declared, site)
         if row.cls not in ("exact", "no record span") and not row.floating:
             row.explained_by = explain_by_sibling(row, spans, siblings)
         rows.append(row)
@@ -423,8 +410,13 @@ def write_csv(rows: list[Row], path: str) -> None:
 
 def partition(rows: list[Row]) -> dict[str, list[Row]]:
     """Split the corpus into the groups the report is written around."""
+    # A withdrawn study is out of the archive as far as NCEI is concerned;
+    # asking for its span to be corrected would waste the reader's time.
+    withdrawn = [r for r in rows if r.withdrawn]
+    rows = [r for r in rows if not r.withdrawn]
     flagged = [r for r in rows if r.cls not in ("exact", "no record span")]
     return {
+        "withdrawn": withdrawn,
         "exact": [r for r in rows if r.cls == "exact"],
         "do_not_touch": [r for r in flagged if r.floating],
         "describes_sibling": [r for r in flagged
@@ -461,6 +453,7 @@ def summarise(rows: list[Row]) -> None:
           f"  [{', '.join(sorted(r.site for r in part['do_not_touch']))}]")
     print(f"  describes a sibling file : {len(part['describes_sibling'])}"
           " (not defects)")
+    print(f"  withdrawn by NCEI        : {len(part['withdrawn'])} files (not reported)")
     print(f"  record with no age range : {len(part['no_declared_span'])}")
     print(f"  no record by any route   : {len(part['unresolved'])}"
           f"  [{', '.join(sorted(r.site for r in part['unresolved']))}]")

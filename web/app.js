@@ -96,7 +96,10 @@ async function load() {
     (s.logs_anchored
       ? `${s.logs_anchored.toLocaleString()} floating logs placed by their published calendar anchor · `
       : '') +
-    `${s.logs_floating.toLocaleString()} floating logs withheld — they carry no calendar date`;
+    `${s.logs_floating.toLocaleString()} floating logs withheld — they carry no calendar date` +
+    (s.logs_withdrawn
+      ? ` · ${s.logs_withdrawn.toLocaleString()} logs from ${s.sites_withdrawn} studies NCEI has withdrawn not shown`
+      : '');
   // No resetView() here: it fits the rows to the canvas height, and filling
   // the footer above can wrap it and shrink the canvas by 30-70 px.  The
   // caller resets once layout has settled.

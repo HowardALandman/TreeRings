@@ -4,9 +4,126 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete.** Full pipeline runs end to end, 76,609 logs render in the
-browser (191 of them floating collections placed by their published calendar
-anchor), parser cross-validates against dplR at 100%.
+**Status: M1 complete.** Full pipeline runs end to end, **73,390 logs** in the
+local build (191 of them floating collections placed by their published
+calendar anchor), parser cross-validates against dplR at 100%. **The live site
+still shows the 2026-08-28 build (76,609)** — the 2026-10-18 rebuild is
+committed but not deployed.
+
+## Next session: user interface
+
+Howard wants to work on the UI next; the data work below resumes after. The
+map interface (first user request, deferred behind data cleanup) is the
+obvious candidate — facts for it are under "Open audit findings". Before
+deploying: recapture `og.jpg` (see Link previews) and run
+`scripts/verify_deploy.py`.
+
+## Rebuild of 2026-10-18 (committed, not deployed)
+
+`fetch --templates --refresh`, `harvest`, `emit`, `validate`, `sweep` all run.
+pytest 139 passed.
+
+- **Withdrawn studies withheld** (`corpus.KNOWN_WITHDRAWN`, `harvest.withdrawal()`):
+  harvest found exactly the predicted 25 studies / 34 files; emit withholds
+  **3,424 logs**. The live→new site diff is exactly those 25 sites plus 5 new.
+- **Taxon from the template's Latin name** (AUST115 oak→pine etc., see git log).
+- **Archive changes since 08-28**, separated from the withdrawal effect:
+  76,609 − 3,424 = 73,185; new sites esp102 (31), esp103 (39), pol301–303
+  (15/14/30) = +129; germ4 lost series `048052` = −1; esp104/105 +77 (below)
+  → **73,390**. Ring values edited inside existing series in fran009, germ4,
+  grc034, roma009. Span now 12429 BC – **2025 CE**. Listing: 5,638 `.rwl`,
+  3,092 templates (+15 each). `fetch` prints only the first 20 changed names.
+- **Study records no longer list the legacy `-noaa.rwl` files** — 2,402 of
+  harvest's 2,407 "record no longer lists file". Harmless (always deduped as
+  re-encodings). The other 5: fra053–055, pola021 (known), tur091x.
+- **New reviewed table `corpus.REVIEWED_SPAN_DEFECTS`** (Howard chose this,
+  "option B", 2026-10-18; revisit if a cleaner approach appears). esp103–105
+  (Canfranc, Olano) all declare `Last_Year 1928`, data runs to 2025; for
+  esp104/105 that makes the pair descend, which `declares_years_bp` reads as
+  BP, withholding 77 living trees as floating. The sweep's self-check caught
+  it. Rejected alternative: tighten the BP rule ("descending and future as
+  CE") — it would let a BP file mislabelled CE plot at its ordinals, the
+  dangerous direction. Entries pin the exact raw pair; `SpanDefectStale` fails
+  the build once NCEI corrects it. The sweep reports the raw pair, not its BP
+  conversion.
+- **Sweep vs NCEI progress**: 2,032 of 2,068 files exact (was 1,887);
+  **12 reportable** (was 152), including esp103–105.
+
+**For the next NCEI mail** (plain text, see the sweep entry under Next):
+esp103–105 spans; che419–423 publication DOIs are consecutive unrelated
+Dendrochronologia articles (Stradivari harp, Patagonian *Nothofagus*, …) —
+only che417's is Hartl's paper, **and the viewer links those collections to
+the wrong papers**; esp090's DOI is the Cazorla black-pine paper (esp101's),
+which cites the Pyrenees site only as a reference; tur091x.rwl is
+byte-identical to tur091t.rwl and the record lists only `t`; plus the earlier
+items under "Open audit findings".
+
+## Same-tree merging — feasibility (2026-10-18), not started
+
+Goal: show one rectangle per physical tree/timber, with all its series in the
+detail view. **No archive field records tree membership** — the template's
+`Tree ID:` just repeats the series ID, and ~0 of 3,092 templates document an ID
+scheme. Three cases:
+
+1. *Byte-identical copies* across collections — 2,014 redundant logs, 60 pairs
+   (`scripts/audit/duplicate_sweep.py`). Certain. Open decision: which copy is
+   canonical (Howard, deferred).
+2. *Several cores/radii of one tree* — inferable from IDs, checkable by
+   correlation. `scripts/trees/tree_feasibility.py` (first-difference log
+   widths, ≥30 yr overlap, on the old 76,609 payload): ID-sibling pairs r
+   q05/50/95 = 0.39/0.68/0.88 vs between-group 0.14/0.42/0.68; ~1,100 of
+   ~1,110 testable collections separate by ≥0.1 in median. **Verifies a scheme
+   per collection, not a pair**: a series' best match is its sibling only
+   65.7%. ~24,000 series (31%) have opaque IDs (`LUB001`, `nr12`). The
+   six-digit SSSTTC rule must be guarded (`czec005` `000001…` are trees).
+3. *Variable files* (e/l/w/x) — already deduped (trap 6).
+
+**Paper pilot** (`scripts/trees/extract_sampling.py`, `pdf2txt.py`; Llama 3.3
+70B via ollama, ~4–7 min/paper): 8 open-access papers, 13 collections. 8 gave
+a checkable count — alb003 77 trees/124 series and alb002 99/124 (paper's
+Table 1; its text says 89) match the ID parse exactly; czec006 "one core from
+each tree", 143 = 143; deu493 consistent; **deu494 exposed a parse error**
+(`KEL21_A/_B`, underscore — ≤50 trees, parse says 79); nor031/032 consistent.
+swit383 confirmed the scheme (E/S = east/south cores) but its count conflicts.
+tur091, esp101, esp090, fran042 gave nothing usable. Best case (recent,
+single-site, OA); only ~37% of series sit in a cited collection at all.
+The LLM gave 16/19 verbatim quotes (one "..." splice, correctly rejected) and
+reported cores *collected* (100) instead of series *crossdated* (86/79); a
+plain regex found every sentence it did. Use it to locate passages, never to
+supply numbers. Elsevier/Springer/MDPI block curl; OpenAlex repository copies
+worked for most; Claude in Chrome is allowed with Howard's per-use approval at
+human pace.
+
+Proposed design when this resumes: a reviewed per-collection ID-scheme table
+(like `anchors.py`) — merge only where a scheme is reviewed and passes the
+correlation check; papers as one evidence source; everything else stays
+"series, tree unknown". Merged span = union of cores.
+
+## Open audit findings (2026-10-02 audit of the old payload)
+
+`scripts/audit/` is committed as one-off scripts reading `web/data`; rerun
+against the new build before acting on them (withdrawals removed some).
+
+- **ITA blue-intensity files** — `ita07[234]b[el]{25,50,75,100}.rwl`, 24 files,
+  608 logs, labelled "total ring width" in mm. `SITE_RE` does not match the
+  suffix, so they are kept as separate sites. All redundant: same trees as
+  `ita073`, `ita074`, `ital050`. Fix: treat `b[el]\d+` as a variant suffix.
+- **Duplicate series across collections** — see case 1 above. Plus `nor032` ⊂
+  `nor051` at exactly 10× scale and `bulg003x` on `bulg001`'s trees.
+- **Upstream defects for NCEI**: AUST115 title; withdrawn files still served;
+  ITA063 code; Romanian duplicate pairs disagree in longitude by ~0.6°;
+  `fran5`/`fran8` and `germ020`/`swit102` share series across sites ~37 km and
+  ~600 km apart; `ita060` `LARE003X` 1885 = 59.83 mm (typo); FRA053–055 study
+  records now point at `miramont2025-DRM*.txt` instead of the `.rwl` — ask if
+  superseded, since our anchors rest on those files; POLA021 lists no `.rwl`
+  and has no note. The 2026-08-28 sweep's "no age range" row (2704/2710) was
+  withdrawn studies — retract it. Plan: one plain-text email.
+- **Viewer**: the 13 maximum-density collections get a "peak … mm" caption.
+- **Definition**: a "log" is a measured series (core/radius), not a tree.
+- **Map interface** (user feedback) — facts for it: one taxon per collection
+  (pies only arise when collections are merged), 919 collections on 344 shared
+  coordinates, 42 at one Regensburg point, half the coordinates at ≤2 decimals
+  (counts from the old payload).
 
 ## The Hohenheim question
 
@@ -78,6 +195,13 @@ Note the external drive's *root* is `root:wheel` and not writable by `howard`;
 `python -m ehd.validate` needs R with dplR (`install.packages("dplR")`).
 
 ## What the numbers are
+
+**Current build (2026-10-18):** 5,638 `.rwl` listed + 3,092 templates → 2,068
+files after dedup → **76,950 logs**: 76,460 absolute + 191 anchored + 77
+disputed (esp104/105, reviewed) + 86 unverified + 136 floating; 3,424 withheld
+as withdrawn; **73,390 plotted**, 59,448 packed rows. dplR agreement 100.0000%
+on 65,438 series. The detail below is the 2026-08-28 build and is kept for its
+reasoning; its counts are superseded.
 
 All figures below are from the harvest and rebuild of **2026-08-28**.
 

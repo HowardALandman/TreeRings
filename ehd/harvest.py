@@ -12,8 +12,17 @@ and it omits genuine European studies - SWIT240, and the French Late Glacial
 pines FRA053-055, whose records have to be recovered by id from the study
 numbers written into their own template files.  So we take A as the definition
 of the corpus, use B purely for metadata, join the two on filename, and report
-exactly how much of A that join actually covers.  ``ehd.sweep`` closes the
-remaining gap by resolving what the join misses.
+exactly how much of A that join actually covers.  Files the join misses are
+then looked up by the study id written in their own template header.
+
+That second step is not optional.  When NCEI withdraws a study it keeps the
+record, notes the removal in ``studyNotes``, and drops the ``.rwl`` from the
+record's file list - but leaves the file itself in the directory listing.  A
+filename join therefore cannot see a withdrawal at all: the file simply arrives
+with no metadata, and its template header carries on describing it as live.
+That is how 3,424 logs from 25 withdrawn studies (the Maessen Dutch set, removed
+2025-07-31 as "did not meet ITRDB standards", among them) were plotted until
+2026-10.
 
 Usage:
     python -m ehd.harvest
@@ -23,12 +32,64 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import urllib.parse
 
 from . import config, fetch
 
 PAGE = 2000
+
+STUDY_ID_RE = re.compile(r"/(?:paleo/)?study/(\d+)")
+
+# NCEI's withdrawal mark: a dated line in ``studyNotes``.  Every form seen in
+# the European corpus as of 2026-10-02:
+#   31-Jul-2025: Removed - Data did not meet ITRDB standards. See Comments ...
+#   30-Jul-2025: Study Removed - data was mean curves of GERM016
+#   21-Aug-2025: Study Removed - repeat data; study was a resubmission of CHE413
+#   10-Dec-2025: RWL file removed due to crossdating issues.
+# Anchored on the date so that prose such as "series from five timbers removed
+# from the Great Tower" (a real study description) is not read as one.
+WITHDRAWAL_RE = re.compile(
+    r"^\s*(\d{1,2}-[A-Za-z]{3}-\d{4}):?\s*"
+    r"((?:Study\s+|RWL\s+file\s+)?removed\b.*?)\s*$",
+    re.I | re.M,
+)
+
+
+def withdrawal(notes: str | None) -> str:
+    """NCEI's removal statement from a study's notes, or "" if there is none."""
+    m = WITHDRAWAL_RE.search((notes or "").replace("\r", ""))
+    return f"{m.group(1)}: {m.group(2)}" if m else ""
+
+
+def study_id_from_files(raw_dir: str, site: str) -> str:
+    """Recover a study id from a file's own template header.
+
+    This is the escape hatch for the API's unreliable continent filter, and for
+    withdrawn studies whose record no longer lists the file: the template names
+    its study's landing page, so the record is still reachable by id.
+    """
+    for suffix in ("-rwl-noaa.txt", "-noaa.rwl", ".rwl"):
+        path = os.path.join(raw_dir, site + suffix)
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "rb") as fh:
+                blob = fh.read(20000).decode("utf-8", errors="replace")
+        except OSError:
+            continue
+        m = STUDY_ID_RE.search(blob)
+        if m:
+            return m.group(1)
+    return ""
+
+
+def fetch_study(study_id: str) -> dict | None:
+    """One study record, live, by id.  Raises if the API cannot be reached."""
+    url = config.NCEI_SEARCH + "?" + urllib.parse.urlencode({"NOAAStudyId": study_id})
+    studies = json.loads(fetch._get(url, timeout=180)).get("study") or []
+    return studies[0] if studies else None
 
 
 def _fields(study: dict) -> dict:
@@ -61,6 +122,7 @@ def _fields(study: dict) -> dict:
         "url": study.get("onlineResourceLink"),
         "earliest_year": study.get("earliestYearCE"),
         "recent_year": study.get("mostRecentYearCE"),
+        "withdrawn": withdrawal(study.get("studyNotes")),
     }
 
 
@@ -128,6 +190,24 @@ def main(argv: list[str] | None = None) -> int:
             if name.endswith(".rwl"):
                 by_file[name] = meta
 
+    # Resolve what the join missed by the study id in each file's own template.
+    # This is where withdrawn studies are found (see the module docstring), so a
+    # lookup that fails aborts the harvest rather than leaving a gap: a missing
+    # record here would plot a withdrawn study as if it were live.
+    raw_dir = config.path(config.RAW, "itrdb", "europe")
+    unlisted: list[str] = []  # record found, but it no longer lists the file
+    for name in sorted(corpus - set(by_file)):
+        study_id = study_id_from_files(raw_dir, name[: -len(".rwl")])
+        if not study_id:
+            continue
+        study = fetch_study(study_id)
+        if study is None:
+            continue
+        by_file[name] = _fields(study)
+        if not by_file[name]["withdrawn"] and name not in _data_files(study):
+            unlisted.append(f"{name} (study {study_id})")
+    withdrawn = sorted(n for n in corpus if (by_file.get(n) or {}).get("withdrawn"))
+
     covered = corpus & set(by_file)
     uncovered = corpus - set(by_file)
     extra = set(by_file) - corpus
@@ -140,6 +220,16 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  metadata for non-corpus    : {len(extra)} (non-European studies)")
     if uncovered:
         print("  examples lacking metadata  :", ", ".join(sorted(uncovered)[:10]))
+    print(f"  withdrawn by NCEI          : {len(withdrawn)}")
+    for name in withdrawn:
+        print(f"      {name}: {by_file[name]['withdrawn']}")
+    # The second, independent signal: a live record that has stopped pointing at
+    # the file without saying why.  Not acted on - FRA053-055 do this because
+    # their study now points at a 2025 re-deposit - but printed for review, so a
+    # withdrawal worded in a way WITHDRAWAL_RE does not know cannot pass unseen.
+    print(f"  record no longer lists file: {len(unlisted)} (not withdrawn; review)")
+    for entry in unlisted:
+        print(f"      {entry}")
 
     path = os.path.join(out_dir, "study_metadata.json")
     with open(path, "w") as fh:

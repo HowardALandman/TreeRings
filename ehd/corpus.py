@@ -83,8 +83,29 @@ GENUS = {
     "PT": ("Platanus", "plane"),
 }
 
-# Taxa called out by name in the visualization; everything else is grouped.
-FOCUS_GROUPS = {"oak", "pine"}
+# The same table keyed by genus, for reading the template's Latin name.
+GENUS_COMMON = {genus: common for genus, common in GENUS.values()}
+
+# Collections whose study NCEI has withdrawn, as of the live records read
+# 2026-10-02.  Like sweep.KNOWN_FLOATING this is a *check*, not the mechanism:
+# withdrawal is read from each record's notes by ``harvest.withdrawal``, and this
+# set only asserts that the ones we know about are still being caught.  A
+# harvest that silently stopped seeing withdrawals would otherwise put 3,424
+# logs back on screen with nothing to show for it.
+KNOWN_WITHDRAWN = {
+    # Maessen, 31-Jul-2025: "did not meet ITRDB standards".  NETH025's check
+    # sheet: "perhaps ring counted, not crossdated - no common signal".
+    "neth020", "neth021", "neth022", "neth023", "neth024", "neth025", "neth026",
+    "neth028", "neth029", "neth030", "neth031", "neth032", "neth033", "neth034",
+    # Same reason, 9-Jun-2026.
+    "fran035", "fran036", "ital017",
+    # 21-Aug-2025: resubmissions of che413-416, which stay.
+    "che602", "che609", "che610", "che611",
+    # Becker: mean curves of germ016/germ014, and a duplicate of germ016.
+    "germ015", "germ017", "germ018",
+    # 10-Dec-2025: "RWL file removed due to crossdating issues".
+    "swit338",
+}
 
 
 @dataclass
@@ -123,6 +144,9 @@ class Log:
     # Years added to the file's own year column; 0 unless anchored.  Anything
     # comparing against the raw file (ehd.validate vs dplR) must subtract it.
     year_shift: int = 0
+    # NCEI's removal statement if the study has been withdrawn; such logs are
+    # parsed and validated but never plotted.
+    withdrawn: str = ""
 
     @property
     def n_rings(self) -> int:
@@ -141,6 +165,7 @@ class CorpusStats:
     n_floating: int = 0
     n_anchored: int = 0
     n_disputed: int = 0
+    n_withdrawn: int = 0
     warnings: list[str] = field(default_factory=list)
 
 
@@ -207,6 +232,7 @@ NOAA_FIELDS = {
     "Elevation_m": "elevation",
     "Species_Name": "species_name",
     "Common_Name": "common_name",
+    "Tree_Species_Code": "species_code",
     "Online_Resource": "url",
     "NOAA_Landing_Page": "url",
     "Earliest_Year": "declared_first",
@@ -227,6 +253,33 @@ DATING_TOLERANCE_YEARS = 100
 # above the Late Glacial declarations (swit195-198 at -12287, swit240 at
 # -13050) that the horizon exists to catch.
 PRE_ARCHIVE_HORIZON_CE = -8000
+
+
+@dataclass(frozen=True)
+class SpanDefect:
+    declared: tuple[int, int]   # the raw pair exactly as reviewed
+    evidence: str
+
+
+# Declared spans read by a person and found to be wrong in a way the classifier
+# would misread - a CE span whose end was mistyped below its start looks exactly
+# like BP ordering, and floats calendar-dated living trees.  A table rather than
+# a rule, for the same reason as ``anchors.ANCHORS``: tightening the BP test
+# (e.g. "descending and in the future as CE") would also let a future BP file
+# mislabelled CE through as calendar dates, which fails in the dangerous
+# direction.  Each entry pins the exact pair reviewed; if the archive corrects
+# it, ``classify_dating`` raises and the entry must be removed by hand.
+REVIEWED_SPAN_DEFECTS: dict[str, SpanDefect] = {
+    # Canfranc (Olano, deposited 2026-10): esp103-105 all declare Last_Year
+    # 1928 while every file measures to 2025; header line 2 repeats the pair.
+    # Time_Unit says CE; esp104 measures 1941-2025, esp105 1929-2025.
+    "esp104": SpanDefect((1941, 1928), "Last_Year 1928 copied across esp103-105; measured 1941-2025"),
+    "esp105": SpanDefect((1930, 1928), "Last_Year 1928 copied across esp103-105; measured 1929-2025"),
+}
+
+
+class SpanDefectStale(Exception):
+    """A reviewed span defect no longer matches what the archive declares."""
 
 
 DOI_RESOLVER_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.I)
@@ -303,11 +356,23 @@ def species_from_study_name(name: str) -> str:
     return m.group(1) if m else ""
 
 
-def classify(species_code: str) -> tuple[str, str]:
-    """Return (genus, display group) for a 4-letter ITRDB species code."""
+def classify(species_code: str, latin: str = "") -> tuple[str, str]:
+    """Return (genus, display group) for a collection.
+
+    The template's Latin name decides when there is one; the 4-letter code is
+    the fallback.  The code is the weaker source twice over.  It used to come
+    from the study *title*, and AUST115's title says QUPE (sessile oak) for 588
+    *Pinus nigra* series - its own template says PILR, its Tucson header says
+    "Austrian pine", its series are ``At2Pn*``.  And even a template's code is
+    only read through its first two letters, which ITA063's non-standard PIAB
+    turns into pine for *Picea abies*.  The Latin name was right in all three
+    collections where the two disagreed (aust115, ita063, ital029).
+    """
+    first = (latin or "").split()
+    word = first[0].capitalize() if first else ""
+    if word:
+        return word, GENUS_COMMON.get(word, "other")
     genus, common = GENUS.get((species_code or "")[:2].upper(), ("", ""))
-    if common in FOCUS_GROUPS:
-        return genus, common
     return genus, common or "other"
 
 
@@ -347,11 +412,12 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
             meta["declared_first"] = api.get("earliest_year")
             meta["declared_last"] = api.get("recent_year")
         study_name = meta.get("study_name") or api.get("study_name") or ""
-        code = species_from_study_name(study_name)
-        genus, group = classify(code)
+        code = meta.get("species_code") or species_from_study_name(study_name)
+        genus, group = classify(code, meta.get("species_name", ""))
+        withdrawn = api.get("withdrawn") or ""
 
         variant = (split_site_variant(name) or (site, ""))[1]
-        dating = classify_dating(result.series, meta)
+        dating = classify_dating(result.series, meta, site)
         series = result.series
         shift = 0
         anchor = anchors.ANCHORS.get(site)
@@ -401,8 +467,11 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
                     anchor_sigma=anchor.sigma if anchor else None,
                     anchor_source=anchor.source if anchor else "",
                     year_shift=shift,
+                    withdrawn=withdrawn,
                 )
             )
+        if withdrawn:
+            stats.n_withdrawn += 1
         if dating == "anchored":
             stats.n_anchored += 1
         elif dating == "floating":
@@ -410,7 +479,8 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
         elif dating == "disputed":
             stats.n_disputed += 1
             stats.warnings.append(
-                f"{name}: declared span {declared_span_ce(meta)} does not meet "
+                f"{name}: declared span "
+                f"({meta.get('declared_first')}, {meta.get('declared_last')}) does not meet "
                 f"measured span "
                 f"({min(s.first_year for s in result.series)}, "
                 f"{max(s.last_year for s in result.series)})"
@@ -481,7 +551,7 @@ def spans_overlap(
     return a[0] <= b[1] + slack and b[0] <= a[1] + slack
 
 
-def classify_dating(series: list[Series], meta: dict) -> str:
+def classify_dating(series: list[Series], meta: dict, site: str = "") -> str:
     """Decide what a collection's year column means.
 
     ``absolute``    the measured span and the declared span describe the same
@@ -508,9 +578,23 @@ def classify_dating(series: list[Series], meta: dict) -> str:
     Overlap replaces endpoint agreement because a declared span is routinely
     narrower than the data - it describes the site chronology, not the longest
     log - and being narrower is not evidence of relative numbering.
+
+    A ``site`` listed in ``REVIEWED_SPAN_DEFECTS`` is ``disputed`` by review,
+    provided the archive still declares exactly the pair that was reviewed.
     """
     if not series:
         return "unknown"
+    defect = REVIEWED_SPAN_DEFECTS.get(site)
+    if defect is not None:
+        try:
+            raw = (int(float(meta["declared_first"])), int(float(meta["declared_last"])))
+        except (KeyError, TypeError, ValueError):
+            raw = None
+        if raw != defect.declared:
+            raise SpanDefectStale(
+                f"{site}: reviewed declared span {defect.declared} but the archive "
+                f"now declares {raw}; re-review and update REVIEWED_SPAN_DEFECTS")
+        return "disputed"
     declared = declared_span_ce(meta)
     if declared is None:
         return "unverified"

@@ -149,3 +149,37 @@ def test_raw_bp_template_values_float_the_french_late_glacial():
     out in CE.
     """
     assert classify_dating(series(1, 434), meta(14378, 13945)) == "floating"
+
+
+# --- reviewed span defects: a mistyped CE end that reads as BP ordering ---
+
+
+def test_mistyped_ce_span_reads_as_bp_without_review():
+    # esp104 (Canfranc, living Norway spruce): declared 1941..1928, measured
+    # 1941-2025.  The descending pair is indistinguishable from BP ordering, so
+    # the rule alone withholds it.  This pins why the table exists.
+    assert classify_dating(series(1941, 2025), meta(1941, 1928)) == "floating"
+
+
+@pytest.mark.parametrize("site,parsed,declared", [
+    ("esp104", (1941, 2025), (1941, 1928)),
+    ("esp105", (1929, 2025), (1930, 1928)),
+])
+def test_reviewed_span_defect_is_disputed(site, parsed, declared):
+    assert classify_dating(series(*parsed), meta(*declared), site) == "disputed"
+
+
+def test_reviewed_span_defect_fails_once_the_archive_corrects_it():
+    from ehd.corpus import SpanDefectStale
+
+    with pytest.raises(SpanDefectStale):
+        classify_dating(series(1941, 2025), meta(1941, 2025), "esp104")
+
+
+def test_every_reviewed_span_defect_is_a_descending_pair():
+    # An ascending pair never needs the table: the overlap test already
+    # handles it.  An entry that is not descending was added by mistake.
+    from ehd.corpus import REVIEWED_SPAN_DEFECTS
+
+    for site, defect in REVIEWED_SPAN_DEFECTS.items():
+        assert defect.declared[0] > defect.declared[1], site

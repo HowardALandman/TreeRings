@@ -130,3 +130,14 @@ def test_implausible_years_are_rejected(tmp_path):
     p = tmp_path / "x.rwl"
     p.write_text("a\nb site 950 52.13 4.483\n")  # trailing numbers are coordinates
     assert header_span(str(p)) is None
+
+
+def test_template_span_reports_a_reviewed_defect_as_written(tmp_path):
+    # esp104 is read as CE by review, so the report must show NCEI the pair
+    # their template actually holds (1941..1928), not its BP conversion (9..22).
+    from ehd.sweep import template_span
+
+    p = tmp_path / "esp104-rwl-noaa.txt"
+    p.write_text("#   First_Year: 1941\n#   Last_Year: 1928\n#   Time_Unit: CE\n")
+    assert template_span(str(p), "esp104") == (1941, 1928)
+    assert template_span(str(p)) == (9, 22)
