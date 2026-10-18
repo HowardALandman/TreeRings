@@ -14,8 +14,15 @@ calendar anchor), parser cross-validates against dplR at 100%. **Deployed
 A second deploy the same day added: `og.jpg` recaptured from the map, the UI
 changes under "Map view" (Show on map, kept selections, 2-D wheel, bounded
 zoom-out, theme fix), and the printed-null fix. Howard checked them on
-localhost (Firefox, real wheel) first. **Facebook still needs a re-scrape** to
-show the new card (see Link previews).
+localhost (Firefox, real wheel) first.
+
+**Sharing / waiting on users (2026-10-18).** Howard announced the site ~20 days
+earlier on Facebook, X, Bluesky, r/treerings and r/sfwtrees. After the deploy,
+Facebook shows the new map card without a re-scrape; **X still shows the old
+ladder card** (its cached copy — not something the site can fix); Discord and
+Bluesky not yet checked. Next step is Howard's: wait for user comments, then
+triage them. The map was the first user request; the rest of the UI list is
+open.
 
 ## Map view (2026-10-18, first attempt, deployed)
 
