@@ -620,22 +620,82 @@ canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
   if (state.display === 'map') return mapWheel(e);
   const [px, py] = canvasXY(e);
-  const k = Math.pow(1.0015, -e.deltaY);
+  zoomTimeline(px, py, Math.pow(1.0015, -e.deltaY), !e.altKey, !e.shiftKey);
+  draw();
+}, { passive: false });
+
+/* Zoom by factor k about canvas point (px, py), keeping that point fixed.
+ * Shared by the wheel and a two-finger pinch, so both obey the same clamps. */
+function zoomTimeline(px, py, k, rows = true, time = true) {
   const fit = timelineFit();
-  if (!e.altKey) {
+  if (rows) {
     const before = (py - 26) / state.view.pxPerRow + state.view.yRow;
     state.view.pxPerRow = clamp(
       state.view.pxPerRow * k, Math.min(ZOOM_OUT_LIMIT * fit.pxPerRow, MAX_PX_PER_ROW), MAX_PX_PER_ROW
     );
     state.view.yRow = before - (py - 26) / state.view.pxPerRow;
   }
-  if (!e.shiftKey) {
+  if (time) {
     const before = yearAt(px);
     state.view.pxPerYear = clamp(state.view.pxPerYear * k, ZOOM_OUT_LIMIT * fit.pxPerYear, 40);
     state.view.xYear = before - px / state.view.pxPerYear;
   }
+}
+
+/* Touch: one finger pans, two pinch-zoom about their midpoint and pan with it.
+ * Mouse input stays on the mouse handlers above.  A tap is left alone: the
+ * browser follows it with compatibility mouse events (so mousedown/mouseup
+ * select as for a click), which a preventDefault here would suppress.  The
+ * canvas's touch-action: none keeps the browser from taking the gesture for
+ * page scroll or page zoom. */
+const touches = new Map();  // pointerId -> [x, y] in canvas px
+let touchMoved = false;
+
+function touchCentroid() {
+  const ps = [...touches.values()];
+  const x = ps.reduce((s, p) => s + p[0], 0) / ps.length;
+  const y = ps.reduce((s, p) => s + p[1], 0) / ps.length;
+  const d = ps.length > 1 ? Math.hypot(ps[0][0] - ps[1][0], ps[0][1] - ps[1][1]) : 0;
+  return { x, y, d };
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  if (touches.size === 0) touchMoved = false;
+  touches.set(e.pointerId, canvasXY(e));
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch' || !touches.has(e.pointerId)) return;
+  const before = touchCentroid();
+  touches.set(e.pointerId, canvasXY(e));
+  if (touches.size > 2) return;  // a third finger: ignore until it lifts
+  const after = touchCentroid();
+  const dx = after.x - before.x, dy = after.y - before.y;
+  if (!touchMoved && Math.abs(dx) + Math.abs(dy) < 1 && before.d === after.d) return;
+  if (!touchMoved) {
+    touchMoved = true;
+    state.hover = -1;
+    state.mapHover = -1;
+    $('tooltip').classList.remove('visible');
+  }
+  const k = before.d > 0 && after.d > 0 ? after.d / before.d : 1;
+  if (state.display === 'map') {
+    const mv = state.mapView;
+    mv.cx -= dx / mv.scale;
+    mv.cy -= dy / mv.scale;
+    if (k !== 1) zoomMap(after.x, after.y, k);
+  } else {
+    state.view.xYear -= dx / state.view.pxPerYear;
+    state.view.yRow -= dy / state.view.pxPerRow;
+    if (k !== 1) zoomTimeline(after.x, after.y, k);
+  }
   draw();
-}, { passive: false });
+});
+
+for (const type of ['pointerup', 'pointercancel']) {
+  canvas.addEventListener(type, (e) => { touches.delete(e.pointerId); });
+}
 
 /* From clientX, not offsetX: Chrome reported offsetX (304, 110) for a
  * WheelEvent dispatched at canvas (608, 354). */
@@ -1099,16 +1159,20 @@ function mapMouseMove(e) {
 }
 
 function mapWheel(e) {
+  const [px, py] = canvasXY(e);
+  zoomMap(px, py, Math.pow(1.0015, -e.deltaY));
+  draw();
+}
+
+function zoomMap(px, py, k) {
   const mv = state.mapView;
   const W = canvas.clientWidth, H = canvas.clientHeight;
-  const [px, py] = canvasXY(e);
   // Keep the point under the cursor fixed while the scale changes.
   const x = (px - W / 2) / mv.scale + mv.cx;
   const y = (py - H / 2) / mv.scale + mv.cy;
-  mv.scale = clamp(mv.scale * Math.pow(1.0015, -e.deltaY), mapMinScale(), MAP_MAX_SCALE);
+  mv.scale = clamp(mv.scale * k, mapMinScale(), MAP_MAX_SCALE);
   mv.cx = x - (px - W / 2) / mv.scale;
   mv.cy = y - (py - H / 2) / mv.scale;
-  draw();
 }
 
 /* Collections at a point that have logs passing the taxon and era filters. */
@@ -1281,10 +1345,21 @@ function clearPlace() {
   if (state.display === 'map') draw(); else resetView();
 }
 
-const HELP = {
+const HELP = matchMedia('(pointer: coarse)').matches ? {
+  timeline: 'Drag to pan · pinch to zoom · tap a log for details',
+  map: 'Drag to pan · pinch to zoom · tap a circle for its collections',
+} : {
   timeline: 'Drag to pan · wheel to zoom · shift+wheel rows only · alt+wheel time only',
   map: 'Drag to pan · wheel to zoom · circle area proportional to logs · click a circle for its collections',
 };
+
+// Narrow screens fold the two long footer lines away behind a toggle.
+$('f-more').addEventListener('click', () => {
+  const open = $('app').querySelector('footer').classList.toggle('expanded');
+  $('f-more').textContent = open ? 'less' : 'more';
+  $('f-more').setAttribute('aria-expanded', String(open));
+  resize();
+});
 
 function syncDisplayControls() {
   const map = state.display === 'map';

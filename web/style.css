@@ -186,6 +186,9 @@ button[aria-pressed="true"] {
 
 .stage { position: relative; flex: 1; min-height: 0; }
 canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+/* Drag and pinch on the main canvas pan and zoom it (app.js, pointer
+ * handlers); without this the browser takes them for page scroll and zoom. */
+#canvas { touch-action: none; }
 canvas.panning { cursor: grabbing; }
 
 /* --- tooltip ------------------------------------------------------------ */
@@ -290,4 +293,21 @@ footer {
   color: var(--text-secondary);
   background: var(--surface-1);
   z-index: 20;
+}
+
+/* Phones.  The footer's count and provenance lines wrapped to ~8 lines at
+ * phone width and took the canvas's height, so they fold behind "more". */
+#f-more { display: none; }
+@media (max-width: 700px) {
+  header { padding: 6px 10px; gap: 4px 12px; }
+  .controls { padding: 6px 10px; gap: 6px 10px; }
+  footer { padding: 4px 10px; gap: 2px 10px; font-size: 11px; align-items: baseline; }
+  footer:not(.expanded) #f-counts,
+  footer:not(.expanded) #f-provenance { display: none; }
+  #f-help { flex: 1; }
+  #f-more {
+    display: inline;
+    border: none; background: transparent; padding: 0 2px;
+    color: var(--text-secondary); font-size: 11px; text-decoration: underline;
+  }
 }

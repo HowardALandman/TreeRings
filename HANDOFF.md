@@ -24,6 +24,35 @@ Bluesky not yet checked. Next step is Howard's: wait for user comments, then
 triage them. The map was the first user request; the rest of the UI list is
 open.
 
+## Touch / phone support (2026-10-19, on the test branch, not production)
+
+Howard's Android Chrome check (2026-10-19): taps select, panels open and close,
+view hand-off works, no stuck tooltip — but no pan or zoom at all (no touch
+handlers; pinch zoomed the page) and the footer wrapped to 8 lines. Now:
+
+- Pointer handlers for `pointerType === 'touch'` only: one finger pans, two
+  pinch-zoom about their midpoint (both axes) and pan with it. Wheel and pinch
+  share `zoomTimeline` / `zoomMap`, so the same clamps apply. Taps still go
+  through the browser's compatibility mouse events (no `preventDefault` on
+  pointer events, which would suppress them). `#canvas { touch-action: none }`.
+- ≤700 px: tighter header/controls, footer folds the counts and provenance
+  lines behind "more" (8 lines → 2). Coarse pointers get a touch hint.
+- Verified in Chrome by dispatched PointerEvents: pan exact, pinch 2.000× with
+  anchor drift < 1e-11, zoom-out floor holds, taps open detail/place and an
+  empty tap closes; footer 42 px vs 129 px expanded. **Real multi-touch is
+  only testable on a phone.** Dispatched `mouseup` must target the canvas, not
+  `window`, or its `offsetX` is window-relative and the hit test misses.
+
+**Test deploys:** `npx wrangler@4.124.0 pages deploy web/ --project-name ehd
+--branch test` → `https://test.ehd-612.pages.dev` (stable alias, `noindex`,
+no DNS needed; production untouched). First used 2026-10-19 (`2a09c713`),
+carrying the touch work and the DOI fix, both uncommitted at the time.
+
+`scripts/serve.py` sends no `Cache-Control` for the HTML, so Chrome cached a
+stale `index.html` next to a new `app.js` and the page died at load. Production
+is not affected (Pages sends `max-age=0, must-revalidate` for HTML); hard-reload
+locally after changing `index.html`.
+
 ## Presenting the work (2026-10-19)
 
 **Target: TRACE 2027** (Association for Tree-Ring Research annual meeting),
