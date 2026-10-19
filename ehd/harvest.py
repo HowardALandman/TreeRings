@@ -105,7 +105,7 @@ def _fields(study: dict) -> dict:
             lat = lon = None
 
     pubs = study.get("publication") or []
-    doi = next((p.get("doi") for p in pubs if p.get("doi")), None)
+    dois = publication_dois(pubs)
     citation = next((p.get("citation") for p in pubs if p.get("citation")), None)
 
     return {
@@ -117,13 +117,33 @@ def _fields(study: dict) -> dict:
         "lat": lat,
         "lon": lon,
         "investigators": study.get("investigators"),
-        "doi": doi,
+        "dois": dois,
         "citation": citation,
         "url": study.get("onlineResourceLink"),
         "earliest_year": study.get("earliestYearCE"),
         "recent_year": study.get("mostRecentYearCE"),
         "withdrawn": withdrawal(study.get("studyNotes")),
     }
+
+
+def publication_dois(pubs: list[dict]) -> list[str]:
+    """Every DOI a study record lists for its publications, in record order.
+
+    The record keeps them under ``identifier`` ({"type": "doi", "id": ...}).
+    This used to read a top-level ``doi`` key that the API never sends, so
+    until 2026-10-19 no harvested record had a DOI (0 of 12,629) and every DOI
+    the viewer showed came from the per-file template, unchecked.
+    """
+    out: list[str] = []
+    for p in pubs:
+        idents = p.get("identifier") or []
+        for ident in [idents] if isinstance(idents, dict) else idents:
+            if (ident.get("type") or "").lower() != "doi" or not ident.get("id"):
+                continue
+            doi = ident["id"].strip()
+            if doi not in out:
+                out.append(doi)
+    return out
 
 
 def _data_files(study: dict) -> list[str]:

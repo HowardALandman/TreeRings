@@ -707,11 +707,13 @@ async function showDetail(i) {
     ['ITRDB code', site.code],
     ['Dating', datingBadge(site)],
     ['Study', site.url ? `<a href="${esc(site.url)}" target="_blank" rel="noopener">${esc(site.study || site.code)}</a>` : esc(site.study)],
-    ['DOI', site.doi ? `<a href="https://doi.org/${esc(site.doi)}" target="_blank" rel="noopener">${esc(site.doi)}</a>` : ''],
+    [site.dois && site.dois.length > 1 ? 'DOIs' : 'DOI', (site.dois || [])
+      .map((d) => `<a href="https://doi.org/${esc(d)}" target="_blank" rel="noopener">${esc(d)}</a>`)
+      .join('<br>')],
   ];
   $('d-fields').innerHTML = rows
     .filter(([, v]) => v)
-    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Dating' || k === 'Study' || k === 'DOI' ? v : esc(v)}</dd>`)
+    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Dating' || k === 'Study' || k.startsWith('DOI') ? v : esc(v)}</dd>`)
     .join('');
 
   $('detail').classList.add('open');

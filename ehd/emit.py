@@ -122,6 +122,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  {len(disputed)} plotted with a disputed declared span")
     for site in sorted({log.site for log in disputed}):
         print(f"    {site}")
+    # Upstream defects for the next NCEI mail; the viewer links the record's.
+    print(f"  {len(stats.doi_conflicts)} files whose template DOI their study "
+          f"record does not list (record's DOIs used)")
+    for name, doi in sorted(stats.doi_conflicts.items()):
+        print(f"    {name}: {doi}")
 
     # Stable site index, so the buffer can refer to metadata by integer.
     sites = sorted({log.site for log in plotted})
@@ -191,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
                 "elev": log.elevation,
                 "who": log.investigators,
                 "study": log.study_name,
-                "doi": log.doi,
+                "dois": log.dois,
                 "url": log.url,
                 "dating": log.dating,
                 "variant": corpus.VARIANT_LABEL.get(log.variant, log.variant),

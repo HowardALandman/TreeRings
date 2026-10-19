@@ -134,7 +134,7 @@ class Log:
     elevation: str = ""
     investigators: str = ""
     study_name: str = ""
-    doi: str = ""
+    dois: list[str] = field(default_factory=list)
     url: str = ""
     dating: str = "absolute"
     # For dating == "anchored": 1-sigma of the calendar position, and the
@@ -167,6 +167,8 @@ class CorpusStats:
     n_disputed: int = 0
     n_withdrawn: int = 0
     warnings: list[str] = field(default_factory=list)
+    # file -> template DOI its study record does not list (see choose_dois)
+    doi_conflicts: dict[str, str] = field(default_factory=dict)
 
 
 def split_site_variant(filename: str) -> tuple[str, str] | None:
@@ -283,6 +285,33 @@ class SpanDefectStale(Exception):
 
 
 DOI_RESOLVER_RE = re.compile(r"^(?:https?://)?(?:dx\.)?doi\.org/", re.I)
+
+
+def choose_dois(template_doi: str, record_dois: list[str]) -> tuple[list[str], str]:
+    """The publications to link for a file, and any template DOI the record denies.
+
+    The study record is the authority: it is what NCEI maintains, and it names
+    each publication by title as well as DOI.  The per-file template carries a
+    single DOI that nothing checks, and it can be wrong - che419-423 give five
+    consecutive Dendrochronologia DOIs (a harp, Patagonian Nothofagus, ...)
+    where their records list Hartl et al. 2022.  So link every DOI the record
+    lists, the template's first when the record agrees with it, and drop a
+    template DOI the record does not list, returning it for the upstream report.
+    With no DOI in the record there is nothing to check against, and the
+    template's is used as given.  DOIs compare case-insensitively.
+    """
+    template_doi = DOI_RESOLVER_RE.sub("", template_doi or "").strip()
+    # Sorted: the API returns a study's publications in no stable order (29
+    # records' first citation swapped between two harvests a day apart).
+    record = sorted({DOI_RESOLVER_RE.sub("", d).strip() for d in record_dois if d and d.strip()})
+    if not record:
+        return ([template_doi] if template_doi else []), ""
+    if not template_doi:
+        return record, ""
+    match = [d for d in record if d.lower() == template_doi.lower()]
+    if not match:
+        return record, template_doi
+    return match[:1] + [d for d in record if d.lower() != template_doi.lower()], ""
 
 
 # NCEI's maintained templates print a missing value as Python would:
@@ -423,6 +452,9 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
         code = meta.get("species_code") or species_from_study_name(study_name)
         genus, group = classify(code, meta.get("species_name", ""))
         withdrawn = api.get("withdrawn") or ""
+        dois, denied = choose_dois(meta.get("doi", ""), api.get("dois") or [])
+        if denied:
+            stats.doi_conflicts[name] = denied
 
         variant = (split_site_variant(name) or (site, ""))[1]
         dating = classify_dating(result.series, meta, site)
@@ -469,7 +501,7 @@ def build_logs(raw_dir: str | None = None, limit: int = 0):
                     or api.get("investigators")
                     or "",
                     study_name=study_name,
-                    doi=meta.get("doi") or (api.get("doi") or ""),
+                    dois=dois,
                     url=meta.get("url") or (api.get("url") or ""),
                     dating=dating,
                     anchor_sigma=anchor.sigma if anchor else None,

@@ -144,13 +144,29 @@ pytest 139 passed.
   **12 reportable** (was 152), including esp103–105.
 
 **For the next NCEI mail** (plain text, see the sweep entry under Next):
-esp103–105 spans; che419–423 publication DOIs are consecutive unrelated
-Dendrochronologia articles (Stradivari harp, Patagonian *Nothofagus*, …) —
-only che417's is Hartl's paper, **and the viewer links those collections to
-the wrong papers**; esp090's DOI is the Cazorla black-pine paper (esp101's),
-which cites the Pyrenees site only as a reference; tur091x.rwl is
-byte-identical to tur091t.rwl and the record lists only `t`; plus the earlier
-items under "Open audit findings".
+esp103–105 spans; che419–423 **template** DOIs are consecutive unrelated
+Dendrochronologia articles (Prislan protocol, Stradivari harp, *Nothofagus*,
+*Austrocedrus*, Scots pine sapwood — titles checked on Crossref 2026-10-19)
+while their study records correctly list Hartl 2022 and Kuhl 2023 (`ehd.emit`
+prints the list); esp090's DOI is the Cazorla black-pine paper (esp101's),
+which cites the Pyrenees site only as a reference — but esp090's own study
+record lists that paper too, so it is the depositor's claim, not a template
+slip, and the viewer still links it; tur091x.rwl is byte-identical to
+tur091t.rwl and the record lists only `t`; plus the earlier items under "Open
+audit findings".
+
+**DOIs now come from the study record (2026-10-19; on the test branch, not production).**
+`harvest` read a `doi` key the API never sends — DOIs live under
+`publication[].identifier` — so 0 of 12,629 records had one and every DOI shown
+was the template's, unchecked. `corpus.choose_dois` now links every DOI the
+record lists (template's first when the record confirms it; the rest sorted,
+because the API's publication order varies between calls — 29 records' first
+citation swapped between harvests a day apart) and drops a template DOI the
+record does not list. Viewer shows all of them ("DOIs"). Rebuild diff vs the
+deployed payload: `logs.bin` identical; `index.json` differs only in DOIs —
+che419–423 corrected, 20 sites gained a DOI, 229 gained extra publications, none
+lost one (832 → 852 sites with a DOI). Checked in Chrome on localhost.
+`tests/test_doi.py`.
 
 ## Same-tree merging — feasibility (2026-10-18), not started
 
