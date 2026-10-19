@@ -422,13 +422,14 @@ test in `tests/`.
   separate into absolute / floating / disputed; `test_templates.py` pins the two
   template vocabularies; `test_listing.py` pins the staleness check;
   `test_sweep.py` pins the two ways the NCEI report can produce a wrong row.
-- `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,154
+- `python -m ehd.validate` — **100.0000% span agreement with dplR on 65,438
   series**, 0 disagreements, 0 invariant failures, 0 series found by dplR that
-  we miss (we additionally read 11,591 series dplR cannot). Re-run 2026-09-26
-  after anchoring; unchanged. Anchored logs are compared in the file's own
-  numbering (`Log.year_shift` is subtracted), since dplR knows nothing of the
-  anchor. Dating classes: 76,332 absolute + 191 anchored + 86 unverified + 136
-  floating = 76,745.
+  we miss (we additionally read 11,512 series dplR cannot). Re-run 2026-10-19
+  on the 2026-10-18 rebuild (was 65,154 / 11,591 on 2026-09-26). Anchored
+  logs are compared in the file's own numbering (`Log.year_shift` is
+  subtracted), since dplR knows nothing of the anchor. Dating classes, all
+  logs including withdrawn: 76,460 absolute + 191 anchored + 77 disputed + 86
+  unverified + 136 floating = 76,950 (2026-10-19).
 - `python -m ehd.sweep` self-checks that the ten floating collections are
   quarantined and the four corrected studies read exact, and that its own
   partition accounts for every file. It exits non-zero if not.

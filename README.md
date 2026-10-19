@@ -5,23 +5,38 @@
 An interactive view of individual subfossil and historical tree logs on a shared
 time axis. One rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
+A map view shows where the collections were taken, one pie per published
+coordinate, linked to the timeline.
 
 The corpus currently loaded is the ITRDB European measurement set —
-**76,529 logs · 2,054 sites · 5407 BC – 2023 CE**. Europe is where this started,
-not the limit of what it handles; see [Scope](#scope).
+**73,390 logs · 2,038 sites · 12429 BC – 2025 CE**. Europe is where this
+started, not the limit of what it handles; see [Scope](#scope).
 
 Most tree-ring resources publish *site chronologies* — averaged curves. This
-shows the underlying logs individually, which is what makes the overlapping
-ladder of chronologies visible: each bar is one tree, and you can see how the
-record is assembled from them.
+shows the underlying measured series individually, which is what makes the
+overlapping ladder of chronologies visible: you can see how the record is
+assembled from them.
+
+**What a "log" is.** One bar is one measured ring-width series — a core or a
+radius — not necessarily one tree. A tree sampled with two cores is two bars,
+because the archive has no field recording which series belong to the same
+tree. The count also includes redundant copies: an audit of an earlier build
+found about 2,000 series deposited byte-identically in more than one
+collection, and about 600 in blue-intensity files that remeasure trees already
+present. Merging both is planned but not done.
 
 ## Why the archive looks the way it does
 
-The corpus is overwhelmingly modern: 7 logs alive in 5000 BC, 84 at 1 CE, and
-62,199 in 1971. Packed together that is a ~62,000-row wedge, so the viewer zooms
+The corpus is overwhelmingly modern: 7 logs alive in 5000 BC, 81 at 1 CE, and
+58,976 in 1971. Packed together that is a ~59,000-row wedge, so the viewer zooms
 on both axes and offers era filters. The **"Before 1 CE" + "Packed together"**
 view is the classic overlapping-chronology ladder, and the most legible entry
 point.
+
+It also has a hole. No log is alive between 11746 BC and 5408 BC: before it
+there are only the anchored French Late Glacial pines, after it continuous
+coverage. The long Central European oak and pine chronology (Hohenheim) covers
+most of that interval, but its per-log measurements have not been published.
 
 ## Scope
 
@@ -82,17 +97,20 @@ regression test in `tests/`:
 - **Three kinds of duplicate** — `-noaa.rwl` re-encodings, per-variable suffixes
   measured on the same trees, and series IDs repeated across sites. Left alone
   these inflate the log count by ~36%.
-- **A declared span narrower than the data is normal.** The declared span
-  describes the site chronology, not the longest log, so dating classification
-  tests overlap rather than endpoint agreement.
+- **A declared span that disagrees with the data is a metadata defect**, not a
+  site chronology narrower than its longest log — NCEI confirmed the study's
+  age range should match the `.rwl` file. Disagreements are common, though (the
+  first sweep found 152 files), so dating classification tests overlap rather
+  than endpoint agreement, and `ehd.sweep` reports the mismatches upstream.
 
 Verification:
 
-- `pytest tests/` — 45 tests; the parser fixtures are the files that broke
+- `pytest tests/` — 152 tests; the parser fixtures are the files that broke
   earlier parsers.
-- `python -m ehd.validate` — **100.0000% span agreement with dplR across 65,154
+- `python -m ehd.validate` — **100.0000% span agreement with dplR across 65,438
   series**, 0 disagreements, 0 invariant failures, and 0 series found by dplR
-  that this parser misses. It additionally reads 11,591 series dplR cannot.
+  that this parser misses. It additionally reads 11,512 series dplR cannot
+  (run 2026-10-19, dplR 1.7.9).
 - `ehd.emit` asserts the packing is overlap-free before writing.
 
 ## Payload size
@@ -103,7 +121,9 @@ which Cloudflare's auto-compression allowlist excludes, so it shipped raw at 84%
 of first load; `index.json` was compressed, but by an edge encoder tuned for
 speed rather than ratio. Pre-compressing both takes first load from 2,192,561 to
 678,710 bytes — 2.09 MiB to 0.64 MiB, 69% smaller — measured live rather than
-locally, since the ratio a CDN serves is not the ratio a build produces.
+locally, since the ratio a CDN serves is not the ratio a build produces
+(2026-08-20, on that day's build). The map's coastline file (~440 KB) is not
+part of first load; it is fetched the first time the map is opened.
 
 Clients that do not accept brotli are not stranded: Cloudflare decodes and
 re-encodes at the edge, so an `Accept-Encoding: gzip` request still gets gzip and
@@ -118,13 +138,26 @@ length against `n_logs` and names the likely cause if it ever mismatches.
 Logs are labelled rather than silently mixed:
 
 - **absolutely dated** — calendar-dated and consistent with archive metadata
-- **unverified** — dated, but no declared span exists to check against (3,464)
-- **disputed** — plotted over a declared span the data contradicts (23)
+  (73,036)
+- **anchored** — a floating collection placed on the calendar by a reviewed
+  anchor taken from its depositors' own dating statement, carried with its
+  uncertainty (191, across 5 collections: the French Late Glacial pines
+  fra053–055 and the Fenland yews brit099–100). The build fails if a file
+  stops reproducing its declared span, so an anchor cannot silently go stale.
+- **unverified** — dated, but no declared span exists to check against (86,
+  across 3 collections)
+- **disputed** — plotted over a declared span the data contradicts (77, across
+  2 collections whose records end in 1928 while their data runs to 2025; each
+  case is reviewed by hand)
 - **floating** — withheld from the timeline entirely; the year column holds ring
-  ordinals, not calendar years (216, across 7 collections)
+  ordinals, not calendar years (136, across 5 Swiss Late Glacial collections)
 
-Absolute offsets for several floating collections exist outside the files, so
-wiring them in would extend the timeline well past 12,000 BP. Not yet done.
+Logs from studies NCEI has withdrawn are parsed and validated but never drawn
+(3,424 logs, 25 studies).
+
+The Swiss Late Glacial pines have been placed on the calendar in the literature
+by radiocarbon wiggle-matching, but no per-file anchor appears anywhere in the
+archive, so they stay floating until a placement can be tied to each file.
 
 ## Data source and credit
 
@@ -134,8 +167,10 @@ by the many investigators credited in each site record and reachable through the
 study links in the viewer. This project neither collected nor re-measured any
 rings; it parses, reconciles, and displays their published data.
 
-Known metadata defects found during reconciliation have been reported to NCEI —
-see `docs/ncei-metadata-report.md`.
+Metadata defects found during reconciliation have been reported to NCEI, which
+has been correcting them — see `docs/ncei-metadata-report.md` and the
+study-by-study sweep in `docs/ncei-sweep-2026-08.txt` (`python -m ehd.sweep`
+reruns it).
 
 ## License
 
