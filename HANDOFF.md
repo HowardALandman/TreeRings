@@ -24,6 +24,26 @@ Bluesky not yet checked. Next step is Howard's: wait for user comments, then
 triage them. The map was the first user request; the rest of the UI list is
 open.
 
+## Presenting the work (2026-10-19)
+
+**Target: TRACE 2027** (Association for Tree-Ring Research annual meeting),
+24–29 May 2027, Tartu, Estonia (Estonian University of Life Sciences + Univ. of
+Tartu), https://trace2027.ee. **Abstract submission opens 2026-12-01, deadline
+2027-01-31**; feedback by 2027-03-05; registration 2026-12-01 → 2027-04-01. Fees
+and venue not yet posted. Workshops precede the main programme. Themes listed
+include tree rings in archaeological contexts; no data/software session named
+yet. (Read off trace2027.ee 2026-10-18.)
+
+Backups / later: EGU27, Vienna 4–9 Apr 2027, call opens 2026-10-28, deadline
+not posted (EGU25/26 were 15 Jan; first author must be an EGU member, €50 APC
+in 2026); look for a dendro/paleo session once the list is out. Journals:
+Dendrochronologia technical note (software in scope — confirm in the Elsevier
+guide, which blocked fetching), Tree-Ring Research "Research Report" (≤1,500
+words, ≤2 figures), JOSS for the pipeline (fellingdater precedent). The
+ITRDB metadata audit may be a separate paper; nearest prior work is Zhao et al.
+2019 J. Biogeogr. (formatting fixes, not metadata) — check Scholar before
+claiming novelty. Not covered: national meetings, CAA, radiocarbon venues.
+
 ## Map view (2026-10-18, first attempt, deployed)
 
 Timeline / Map switch in the controls (`#map` in the URL restores it). One
