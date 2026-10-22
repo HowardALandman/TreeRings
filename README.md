@@ -122,8 +122,11 @@ of first load; `index.json` was compressed, but by an edge encoder tuned for
 speed rather than ratio. Pre-compressing both takes first load from 2,192,561 to
 678,710 bytes — 2.09 MiB to 0.64 MiB, 69% smaller — measured live rather than
 locally, since the ratio a CDN serves is not the ratio a build produces
-(2026-08-20, on that day's build). The map's coastline file (~440 KB) is not
-part of first load; it is fetched the first time the map is opened.
+(2026-08-20, on that day's build). On the 2026-10-22 build, first load is
+655,918 bytes (0.63 MiB): `logs.bin` 379,843, `index.json` 253,330, and the
+page, `app.js` and `style.css` 22,745, measured live the same way. The map's
+coastline file (438 KB raw, 177 KB as served) is not part of first load; it is
+fetched the first time the map is opened.
 
 Clients that do not accept brotli are not stranded: Cloudflare decodes and
 re-encodes at the edge, so an `Accept-Encoding: gzip` request still gets gzip and
