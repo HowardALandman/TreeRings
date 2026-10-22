@@ -27,7 +27,7 @@ const state = {
   rowCount: 0,
   visible: null,      // Int32Array of log indices currently shown
   bandOffsets: [],
-  view: { xYear: 0, pxPerYear: 1, yRow: 0, pxPerRow: 1 },
+  view: { xYear: 0, pxPerYear: 1, yRow: 0, pxPerRow: 1, fitted: false },
   hover: -1,
   selected: -1,
   dpr: 1,
@@ -412,6 +412,7 @@ function resetView() {
   state.view.pxPerYear = fit.pxPerYear;
   state.view.yRow = 0;
   state.view.pxPerRow = fit.pxPerRow;
+  state.view.fitted = true;
   draw();
 }
 
@@ -1384,7 +1385,10 @@ function setDisplay(d) {
   try {
     history.replaceState(null, '', d === 'map' ? '#map' : location.pathname + location.search);
   } catch (err) { /* file:// and sandboxed frames refuse; the hash is a convenience */ }
+  // A page opened at #map has fitted only the map; the timeline's first
+  // showing fits it, as the map's does.
   if (d === 'map' && !state.mapView.fitted) resetMapView();
+  else if (d === 'timeline' && !state.view.fitted) resetView();
   else draw();
 }
 
