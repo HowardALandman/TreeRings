@@ -526,24 +526,27 @@ function drawTimeAxis(W, H, css) {
 function drawBandLabels(W, H, css) {
   if (state.mode !== 'band') return;
   const heights = bandHeights();
-  ctx.font = '600 11px ui-sans-serif, system-ui, sans-serif';
+  const SIZE = 15;
+  ctx.font = `600 ${SIZE}px ui-sans-serif, system-ui, sans-serif`;
   ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
+  ctx.textBaseline = 'middle';
   for (let g = 0; g < heights.length; g++) {
     const name = state.index.groups[g];
     if (!heights[g] || !state.enabled.has(name)) continue;
-    // Label sits just inside the band's top edge; above it would collide with
-    // the time axis for the first band.
-    const y = yOf(state.bandOffsets[g]) + 2;
-    if (heights[g] * state.view.pxPerRow < 14) continue;
-    if (y < 24 || y > H - 12) continue;
+    // Centred on the part of the band that is on screen, below the time
+    // axis: the band's middle when it all fits, and still on screen when
+    // zoomed into part of it.
+    const top = Math.max(yOf(state.bandOffsets[g]), 26);
+    const bottom = Math.min(yOf(state.bandOffsets[g] + heights[g]), H);
+    if (bottom - top < SIZE) continue;
+    const y = (top + bottom) / 2;
     const w = ctx.measureText(name).width;
     ctx.fillStyle = css.getPropertyValue('--surface-1').trim();
     ctx.globalAlpha = 0.72;
-    ctx.fillRect(4, y - 1, w + 8, 14);
+    ctx.fillRect(4, y - SIZE / 2 - 3, w + 10, SIZE + 6);
     ctx.globalAlpha = 1;
     ctx.fillStyle = groupColor(g);
-    ctx.fillText(name, 8, y);
+    ctx.fillText(name, 9, y);
   }
 }
 
