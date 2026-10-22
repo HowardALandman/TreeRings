@@ -128,10 +128,12 @@ async function load() {
 
 /* -------------------------------------------------------------- packing */
 
-/* First-fit packing over a segment tree of row occupancy.
+/* First-fit packing over a segment tree of row occupancy, the same layout as
+ * ehd/pack.py (which emit precomputes for the unfiltered views).
  *
- * rows[i] holds the leftmost (earliest) year occupied in row i, and a log fits
- * in the first row whose value clears its end year.  A linear scan would be
+ * Logs arrive sorted by start year, earliest first.  rows[i] holds the
+ * rightmost (latest) year occupied in row i, and a log fits in the first row
+ * whose value is clear of its start year.  A linear scan would be
  * O(n * rows) - about 4 billion operations at this corpus size - so the tree
  * finds the leftmost qualifying row in O(log rows) instead. */
 /* Writes each log's row into `out`, which the caller sizes to the whole corpus.
@@ -149,8 +151,8 @@ function packRows(order, out) {
   // At most one row per log, so `n` leaves always suffice.
   let size = 1;
   while (size < n) size <<= 1;
-  const INF = 0x7fffffff;
-  const tree = new Int32Array(2 * size).fill(INF);  // max over each subtree
+  const EMPTY = -0x7fffffff;
+  const tree = new Int32Array(2 * size).fill(EMPTY);  // min over each subtree
 
   let used = 0;
 
@@ -158,22 +160,22 @@ function packRows(order, out) {
     const li = order[k];
     const start = state.buf[li * F + START];
     const end = state.buf[li * F + END];
-    const target = end + GAP;
+    const limit = start - GAP;
 
-    // Descend to the leftmost leaf whose stored value exceeds `target`.
+    // Descend to the leftmost leaf whose stored value is below `limit`.
     let node = 1;
-    if (tree[node] <= target) break;  // cannot happen: `size` >= n leaves
+    if (tree[node] >= limit) break;  // cannot happen: `size` >= n leaves
     while (node < size) {
-      node = tree[2 * node] > target ? 2 * node : 2 * node + 1;
+      node = tree[2 * node] < limit ? 2 * node : 2 * node + 1;
     }
     const row = node - size;
     out[li] = row;
     if (row + 1 > used) used = row + 1;
 
-    // Publish the new leftmost year for that row.
-    tree[node] = start;
+    // Publish the new rightmost year for that row.
+    tree[node] = end;
     for (let p = node >> 1; p >= 1; p >>= 1) {
-      const v = Math.max(tree[2 * p], tree[2 * p + 1]);
+      const v = Math.min(tree[2 * p], tree[2 * p + 1]);
       if (tree[p] === v) break;
       tree[p] = v;
     }
@@ -268,7 +270,7 @@ function applyFilters() {
 function repack() {
   const rows = new Int32Array(state.n);
   if (state.mode === 'unified') {
-    const order = Array.from(state.visible).sort(sortByEndDesc);
+    const order = Array.from(state.visible).sort(packOrder);
     state.rowCount = packRows(order, rows);
   } else {
     // Each taxon band packs independently, so a band's height reflects only
@@ -277,7 +279,7 @@ function repack() {
     for (let g = 0; g < state.index.groups.length; g++) {
       const order = Array.from(state.visible)
         .filter((i) => state.buf[i * F + GROUP] === g)
-        .sort(sortByEndDesc);
+        .sort(packOrder);
       if (!order.length) continue;
       heights[g] = packRows(order, rows);
     }
@@ -317,10 +319,12 @@ function assertNoOverlap() {
   return true;
 }
 
-function sortByEndDesc(a, b) {
-  const ea = state.buf[a * F + END], eb = state.buf[b * F + END];
-  if (ea !== eb) return eb - ea;
-  return state.buf[b * F + START] - state.buf[a * F + START];
+/* Matches ehd/pack.py's order: start year, then end year.  Ties keep corpus
+ * order (Array.prototype.sort is stable), where pack.py breaks them by id. */
+function packOrder(a, b) {
+  const sa = state.buf[a * F + START], sb = state.buf[b * F + START];
+  if (sa !== sb) return sa - sb;
+  return state.buf[a * F + END] - state.buf[b * F + END];
 }
 
 function bandHeights() {

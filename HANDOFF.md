@@ -24,6 +24,21 @@ Bluesky not yet checked. Next step is Howard's: wait for user comments, then
 triage them. The map was the first user request; the rest of the UI list is
 open.
 
+## Timeline changes of 2026-10-22 (on the test branch, not production)
+
+- **Packed by start year**, earliest first (was end year, latest first), in
+  `ehd/pack.py` and the viewer's filtered repack. Howard's call after a
+  side-by-side on the test site: each band's left edge becomes a smooth curve
+  instead of a sawtooth. Same first-fit, so the same optimal row counts
+  (59,448 unified; band heights unchanged). Rebuild diff: only the two row
+  columns of `logs.bin` changed; `index.json` identical. The JS repack of the
+  unfiltered corpus reproduces emit's rows for all 73,390 logs in both
+  layouts. `tests/test_pack.py` is the first direct test of the packer
+  (optimal vs an independent depth count, monotone row starts, gap, order
+  independence); the monotone test fails on the old order.
+- Taxon labels centred on the visible part of their band, 15 px.
+- A page opened at `#map` now fits the timeline on its first showing.
+
 ## Touch / phone support (2026-10-19, on the test branch, not production)
 
 Howard's Android Chrome check (2026-10-19): taps select, panels open and close,

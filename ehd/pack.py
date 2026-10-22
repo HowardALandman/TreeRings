@@ -1,11 +1,16 @@
 """Greedy row packing for log rectangles on a shared time axis.
 
-Logs are sorted by end year, latest first, then first-fit into rows: each log
-goes into the topmost row whose leftmost occupied year still sits clear of it.
-This is first-fit interval graph colouring; because the input is sorted by right
-endpoint, the row count lands at the maximum overlap depth, which is optimal.
+Logs are sorted by start year, earliest first, then first-fit into rows: each
+log goes into the topmost row whose rightmost occupied year still sits clear of
+it.  This is first-fit interval graph colouring; because the input is sorted by
+left endpoint, the row count lands at the maximum overlap depth, which is
+optimal.
 
-The sort is fully deterministic (end year, then start year, then id) so that a
+Sorting by start rather than end makes each row's first log start no earlier
+than the row above's, so a band's left edge is a smooth monotone curve.  Sorting
+by end (the layout until 2026-10-22) gives the same row count but a sawtooth.
+
+The sort is fully deterministic (start year, then end year, then id) so that a
 rebuild produces a byte-identical layout - a layout that shifts between runs
 would make visual regressions impossible to spot.
 """
@@ -37,24 +42,24 @@ def pack(
 
     Returns the placements in sorted (drawing) order.
     """
-    ordered = sorted(items, key=lambda t: (-t[2], -t[1], t[0]))
+    ordered = sorted(items, key=lambda t: (t[1], t[2], t[0]))
 
-    # rows[i] is the earliest (leftmost) year currently occupied in row i.
-    # It only ever decreases, because we place logs from latest to earliest.
+    # rows[i] is the latest (rightmost) year currently occupied in row i.
+    # It only ever increases, because we place logs from earliest to latest.
     rows: list[int] = []
     placed: list[Placed] = []
 
     for key, start, end in ordered:
         target = -1
-        for i, leftmost in enumerate(rows):
-            if leftmost - gap > end:
+        for i, rightmost in enumerate(rows):
+            if rightmost + gap < start:
                 target = i
                 break
         if target < 0:
-            rows.append(start)
+            rows.append(end)
             target = len(rows) - 1
         else:
-            rows[target] = start
+            rows[target] = end
         placed.append(Placed(key=key, start=start, end=end, row=target, group=group))
 
     return placed
