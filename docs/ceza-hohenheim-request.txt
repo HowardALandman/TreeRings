@@ -1,0 +1,53 @@
+To: info@ceza.de
+Attn: Dr. Thorsten Westphal
+Subject: Hohenheim ring-width measurements - a public per-log view
+
+Dear Dr. Westphal,
+
+I build an interactive view of tree-ring measurement data: every individual
+log drawn as one bar on a shared calendar axis, coloured by taxon, with its
+ring-width curve a click away. It currently shows 73,390 logs from 2,038
+European sites in the International Tree-Ring Data Bank, at
+
+  https://treerings.howardalandman.org
+
+The project began with the Hohenheim chronology in mind, and I understand
+that the collection and its measurement records are now with CEZA, after the
+Hohenheim working group closed in February. I am writing to ask whether, and
+on what terms, CEZA might share the ring-width measurements.
+
+The view has a long hole that I think the Hohenheim material would fill. In
+the public archive no log is alive between 11746 BC and 5408 BC; before that
+there are only three anchored French Late Glacial pine collections, and after
+it the record is continuous. But I would be glad of whatever material CEZA is
+able to release, from any period, not only the part that fills the gap.
+
+What would be useful, in any format you already have (Tucson .rwl,
+Heidelberg .fh, TRiDaS, or a database export):
+
+  - per-series ring widths, or at least each series' first and last dated
+    year;
+  - the taxon and the site or find location of each series;
+  - whether each series is calendar-dated or floating, and on what basis.
+
+Some questions:
+
+ 1. Is any part of the measurement collection cleared for release, or is it
+    planned to be, for example once your database is complete?
+
+ 2. Under what conditions could it be used? I would credit CEZA and the
+    Hohenheim laboratory on the site and in any publication, and can keep the
+    data itself off public download if needed and show only the drawn bars.
+
+ 3. If a public release is planned (ITRDB, PANGAEA, Zenodo or similar), is
+    there a rough timetable, so that I can wait for it rather than ask you to
+    send anything twice?
+
+The pipeline is open source at https://github.com/HowardALandman/TreeRings
+if you want to see how files are read and checked. Its parser agrees with
+dplR on the dated span of every series that dplR can read. I am also happy
+to write in German if that is easier.
+
+With thanks and best regards,
+
+Howard Landman
