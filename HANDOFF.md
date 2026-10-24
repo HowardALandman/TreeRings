@@ -4,19 +4,34 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete; latest production deploy 2026-10-22** (deployment
-`235d0882.ehd-612.pages.dev`, commit `c113dc5`; README `f6cf9aa` after).
-`verify_deploy.py` 92/92; `app.js`, `style.css`, `logs.bin`, `index.json` and
-the served page match the build byte for byte (payloads compared decoded).
-Since the 2026-10-18 deploys it adds: touch pan/pinch and the phone layout,
-DOIs from the study record, start-year packing, centred taxon labels, and the
-`#map` timeline fit (sections below). Howard is happy with the UI as it
-stands (2026-10-24); next focus is data, chiefly the pre-5408 BC gap (see
-"The Hohenheim question"). **73,390 logs** (191 of them floating collections
-placed by their published calendar anchor), parser cross-validates against
-dplR at 100%. Live first load 655,918 bytes (README, "Payload size").
+**Status: latest production deploy 2026-10-24** (deployment
+`79b358e0.ehd-612.pages.dev`, commit `6e4daf7`): the expanded-Europe +
+Hohenheim build below, now live, with map-circle merging and the narrowed
+circle-size slider (0.3-2.2). `verify_deploy.py` 92/92 (the first run right
+after the deploy failed 3 checks on stale edge copies; a rerun passed).
+**123,370 logs**, dplR cross-validation 100%. Live first load 1,258,673 bytes
+(README, "Payload size"; was 655,918 on the 2026-10-22 build). Previous
+deploy: 2026-10-22, `235d0882`, commit `c113dc5`, 73,390 logs.
 
-## Expanded-Europe test build (2026-10-24, test branch only, deployment `816940ab`)
+**Known stale for this deploy:** the link-preview image `og.jpg` and its
+`og:image:alt` still show the old 1,463-circle Europe map; the alt text matches
+the image, so it is not wrong, only dated. Regenerate both together.
+
+**Next (Howard, 2026-10-24):** rethink at a higher level how the viewer's
+options are organized and set, before adding any more controls. The ITRDB /
+PANGAEA source switch waits on that. Step B (global test build) also open.
+
+**People:** `docs/contacts.md` (local only, gitignored - not in the public repo) tracks everyone contacted or considered, with
+status (in contact / sent / drafted / candidate), published contact details,
+and up to a page of relevant work. Keep it current when a mail is sent or
+answered. As of 2026-10-24:
+- in contact: Ed Gille (NCEI);
+- drafted, Howard to send: Reinig + Büntgen, and Westphal (CEZA);
+- candidates (Colorado, from a Gemini suggestion, claims checked in the file):
+  Chris Guiterman (CIRES/NCEI, ITRDB stewardship), Peter Brown (RMTRR, Fort
+  Collins, OLDLIST), Jason Sibold (CSU Biogeography Lab).
+
+## Expanded-Europe build (2026-10-24; tested as `816940ab`, live since `79b358e0`)
 
 Plan C, step A: expanded Europe (`ehd/region.py`, 47 named places pinned in
 `tests/test_region.py`) + PANGAEA's Hohenheim archive (`ehd/pangaea.py`).
@@ -867,7 +882,7 @@ the classic overlapping-chronology ladder and the most legible entry point.
 
   What would settle it: IntCal20's per-sample records for the Swiss trees,
   with ring positions and series IDs matchable to the ITRDB `DAECHAL*` /
-  swit240 IDs — or ask Frank Reinig (Mainz) / Ulf Büntgen (Cambridge) directly
+  swit240 IDs — or ask Frederick Reinig (Mainz) / Ulf Büntgen (Cambridge) directly
   for the IntCal20 calendar position of each ITRDB file. Uncertainty will be
   decades, not years; the anchor table already carries σ for that.
 

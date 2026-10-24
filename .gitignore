@@ -22,3 +22,6 @@ __pycache__/
 
 # Wrangler's local state/cache from `npx wrangler pages deploy`.
 .wrangler/
+
+# People's contact details and our outreach notes: kept local, not published.
+/docs/contacts.md

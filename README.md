@@ -122,9 +122,11 @@ of first load; `index.json` was compressed, but by an edge encoder tuned for
 speed rather than ratio. Pre-compressing both takes first load from 2,192,561 to
 678,710 bytes — 2.09 MiB to 0.64 MiB, 69% smaller — measured live rather than
 locally, since the ratio a CDN serves is not the ratio a build produces
-(2026-08-20, on that day's build). On the 2026-10-22 build, first load is
-655,918 bytes (0.63 MiB): `logs.bin` 379,843, `index.json` 253,330, and the
-page, `app.js` and `style.css` 22,745, measured live the same way. The map's
+(2026-08-20, on that day's build). On the 2026-10-24 build (expanded Europe
+and the Hohenheim archive, 123,370 logs), first load is 1,258,673 bytes
+(1.20 MiB): `logs.bin` 737,276, `index.json` 495,884, and the page, `app.js`
+and `style.css` 25,513, measured live the same way. (The 2026-10-22 build,
+73,390 logs, was 655,918 bytes.) The map's
 coastline file (438 KB raw, 177 KB as served) is not part of first load; it is
 fetched the first time the map is opened.
 
