@@ -30,9 +30,17 @@ matches, genus and place ≤0.2°; germ069 = HOF12184), duplicates 14, bad spans
 out of region 1. dplR 76,397 series, 100%; 12,349 ours only. Harvest now pulls
 all tree-ring studies on purpose (6,616 in-scope files, 2 without a record).
 First paint 1.23 MB (was 0.63); index.json 6.17 MB raw; 8,497 shards; draw 11 ms,
-era repack 14 ms on the M4. **Crowding:** the map's southern Germany is
-thousands of overlapping small circles (one per Hohenheim object) — the main
-thing to fix before production. `web/index.html` head counts updated for this
+era repack 14 ms on the M4. **Crowding:** the map's southern Germany was
+thousands of overlapping small circles (one per Hohenheim object). Now merged
+on screen (`mapClusters` in app.js, deployment `b941aa52`): only circles under
+10 px radius merge, with small neighbours within a fixed 10 px, one pass. Two
+rules that let large or merged circles reach further snowballed (whole map →
+one circle; a 49,204-log circle) because merged area is summed - see the
+comment. A merged circle has a heavier outline, a "N places merged" tooltip and
+a map note; clicking zooms in (2-8x, enough to separate its closest pair).
+Checked: every place in exactly one circle, log totals equal, 5 ms per merge.
+At continental zoom one honest ~9,500-log circle covers southern Germany - that
+is the Hohenheim archive's density, not a drawing artefact. `web/index.html` head counts updated for this
 build. Not done: step B (global).
 
 ## Direction (Howard, 2026-10-24)

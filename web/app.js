@@ -236,6 +236,7 @@ function applyFilters() {
     .map((_, p) => p)
     .filter((p) => state.pointTotals[p] > 0)
     .sort((a, b) => state.pointTotals[b] - state.pointTotals[a]);
+  state.filterGen = (state.filterGen || 0) + 1;  // invalidates mapClusters()
   state.unmapped = { sites: 0, logs: 0 };
   for (let si = 0; si < siteCounts.length; si++) {
     if (state.sitePoint[si] < 0 && siteCounts[si]) {
@@ -588,8 +589,7 @@ canvas.addEventListener('mousedown', (e) => {
 
 window.addEventListener('mouseup', (e) => {
   if (drag && !drag.moved && state.display === 'map') {
-    const p = mapHitTest(e.offsetX, e.offsetY);
-    if (p >= 0) openPlace(p); else closePlace();
+    clickMap(e.offsetX, e.offsetY);
   } else if (drag && !drag.moved) {
     const i = hitTest(e.offsetX, e.offsetY);
     if (i >= 0) showDetail(i); else closeDetail();
@@ -884,9 +884,16 @@ function closeDetail() {
 /* One circle per distinct published coordinate, area proportional to the logs
  * there that pass the taxon and era filters, drawn as a pie by taxon.
  * Collections that share a point exactly (42 at one Regensburg coordinate)
- * become one circle; nearby points are never merged.  About 40% of
- * collections publish only 2 decimals (~1 km), so one place can still split
- * into neighbouring circles - that is the data, not a rendering choice.
+ * become one circle.  About 40% of collections publish only 2 decimals
+ * (~1 km), so one place can still split into neighbouring circles.
+ *
+ * At a given zoom, circles that would sit on top of each other are drawn
+ * merged (mapClusters): with the Hohenheim archive's ~6,000 buildings, southern
+ * Germany was otherwise an unreadable tangle.  A merged circle's area is the
+ * sum of its members' logs and it sits at their log-weighted centre, so area
+ * still means logs; it says it is merged, and a click zooms in to separate it
+ * instead of opening a panel.  Places are never merged in the data - only on
+ * screen, and only at the zoom where they would overlap.
  *
  * Circles keep their pixel size as the map zooms, as proportional symbols
  * should: zooming separates them rather than inflating them.  Only the hover
@@ -1052,15 +1059,15 @@ function drawMap() {
   const G = state.index.groups.length;
   const colors = state.index.groups.map((_, g) => groupColor(g));
   const halo = tok('--surface-1');
-  for (const p of state.drawOrder) {
-    const pt = state.points[p];
-    const n = state.pointTotals[p];
-    const sx = mapX(pt.x), sy = mapY(pt.y);
+  const clusters = mapClusters();
+  for (const cl of clusters) {
+    const n = cl.n;
+    const sx = mapX(cl.x), sy = mapY(cl.y);
     const rad = state.sizeK * Math.sqrt(n);
     if (sx + rad < 0 || sx - rad > W || sy + rad < 0 || sy - rad > H) continue;
     let a = -Math.PI / 2;  // wedges run clockwise from 12 o'clock, in legend order
     for (let g = 0; g < G; g++) {
-      const c = state.pointCounts[p * G + g];
+      const c = cl.counts[g];
       if (!c) continue;
       ctx.beginPath();
       if (c === n) {
@@ -1079,22 +1086,25 @@ function drawMap() {
       ctx.beginPath();
       ctx.arc(sx, sy, rad, 0, 2 * Math.PI);
       ctx.strokeStyle = halo;
-      ctx.lineWidth = 0.75;
+      ctx.lineWidth = cl.pts.length > 1 ? 1.5 : 0.75;  // merged circles read as such
       ctx.stroke();
     }
   }
 
-  const ring = (p, width) => {
-    if (p < 0 || !state.pointTotals[p]) return;
-    const pt = state.points[p];
+  const ring = (k, width) => {
+    const c = clusters[k];
+    if (!c) return;
     ctx.beginPath();
-    ctx.arc(mapX(pt.x), mapY(pt.y), state.sizeK * Math.sqrt(state.pointTotals[p]) + 2, 0, 2 * Math.PI);
+    ctx.arc(mapX(c.x), mapY(c.y), state.sizeK * Math.sqrt(c.n) + 2, 0, 2 * Math.PI);
     ctx.strokeStyle = tok('--text-primary');
     ctx.lineWidth = width;
     ctx.stroke();
   };
   ring(state.mapHover, 1.5);
-  ring(state.mapSelected, 2.5);
+  // The selection is a place; while it shares a circle, the circle is ringed.
+  if (state.mapSelected >= 0 && state.pointTotals[state.mapSelected]) {
+    ring(state.pointCluster[state.mapSelected], 2.5);
+  }
 
   drawSizeLegend(H, tok);
   drawMapNotes(W, H, tok, bm);
@@ -1103,7 +1113,7 @@ function drawMap() {
 /* Reference circles share a bottom point so their areas compare directly. */
 function drawSizeLegend(H, tok) {
   if (!state.drawOrder.length) return;
-  const max = state.pointTotals[state.drawOrder[0]];
+  const max = mapClusters()[0].n;
   const vals = [1000, 100, 10, 1].filter((v) => v <= max).slice(0, 3);
   const rMax = state.sizeK * Math.sqrt(vals[0]);
   const labelW = 44;
@@ -1147,6 +1157,11 @@ function drawMapNotes(W, H, tok, bm) {
       `(${logs.toLocaleString()} log${logs > 1 ? 's' : ''}) published without coordinates`
     );
   }
+  const merged = mapClusters().filter((c) => c.pts.length > 1).length;
+  if (merged) {
+    notes.push(`${merged.toLocaleString()} circle${merged > 1 ? 's' : ''} (heavier outline) merge ` +
+      'nearby places at this zoom - zoom in or click to separate');
+  }
   if (bm && bm.error) notes.push(`Base map unavailable (${bm.error}); circles are unaffected`);
   else if (bm) notes.push(bm.source);
   ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
@@ -1156,16 +1171,132 @@ function drawMapNotes(W, H, tok, bm) {
   notes.forEach((t, k) => ctx.fillText(t, W - 10, H - 8 - 15 * (notes.length - 1 - k)));
 }
 
+/* Only small circles merge: a circle under MAP_MERGE_PX radius absorbs other
+ * small circles whose centres lie within MAP_MERGE_PX of its own.  Large
+ * circles are never merged - they are already legible, and every rule that
+ * let them absorb neighbours (2026-10-24: reach = own radius; reach = grown
+ * radius, repeated) built giant circles, because a merged circle's area is
+ * the sum of its members'.  The reach is fixed, not the merged circle's
+ * radius, for the same reason.  One pass, largest first, so the result does
+ * not depend on the order points were published in.  Cached per zoom, circle
+ * size and filter state: panning only translates, so it never re-merges. */
+const MAP_MERGE_PX = 10;
+const MAP_MERGE_CELL = 64;  // px, spatial grid for the neighbour search
+
+function mapClusters() {
+  const mv = state.mapView;
+  const key = `${mv.scale}|${state.sizeK}|${state.filterGen}`;
+  if (state.clusterKey === key) return state.clusters;
+  const radius = (n) => state.sizeK * Math.sqrt(n);
+  let cl = state.drawOrder.map((p) => {
+    const pt = state.points[p];
+    return { x: pt.x, y: pt.y, n: state.pointTotals[p], pts: [p] };
+  });
+  {
+    cl.sort((a, b) => b.n - a.n || a.pts[0] - b.pts[0]);
+    const sx = cl.map((c) => c.x * mv.scale), sy = cl.map((c) => c.y * mv.scale);
+    const grid = new Map();
+    const cellOf = (x, y) => `${Math.floor(x / MAP_MERGE_CELL)},${Math.floor(y / MAP_MERGE_CELL)}`;
+    cl.forEach((_, k) => {
+      const c = cellOf(sx[k], sy[k]);
+      if (!grid.has(c)) grid.set(c, []);
+      grid.get(c).push(k);
+    });
+    const gone = new Uint8Array(cl.length);
+    const out = [];
+    for (let k = 0; k < cl.length; k++) {
+      if (gone[k]) continue;
+      if (radius(cl[k].n) >= MAP_MERGE_PX) { out.push(cl[k]); continue; }
+      const R = MAP_MERGE_PX;
+      const take = [];
+      const gx0 = Math.floor((sx[k] - R) / MAP_MERGE_CELL), gx1 = Math.floor((sx[k] + R) / MAP_MERGE_CELL);
+      const gy0 = Math.floor((sy[k] - R) / MAP_MERGE_CELL), gy1 = Math.floor((sy[k] + R) / MAP_MERGE_CELL);
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gy = gy0; gy <= gy1; gy++) {
+          for (const j of grid.get(`${gx},${gy}`) || []) {
+            // j > k: not larger than this one, and not yet a seed itself.
+            if (j <= k || gone[j]) continue;  // j > k: small, as k is
+            const dx = sx[j] - sx[k], dy = sy[j] - sy[k];
+            if (dx * dx + dy * dy < R * R) take.push(j);
+          }
+        }
+      }
+      if (!take.length) { out.push(cl[k]); continue; }
+      const c = cl[k];
+      let n = c.n, wx = c.x * c.n, wy = c.y * c.n;
+      const pts = c.pts.slice();
+      for (const j of take) {
+        gone[j] = 1;
+        const o = cl[j];
+        n += o.n; wx += o.x * o.n; wy += o.y * o.n;
+        pts.push(...o.pts);
+      }
+      out.push({ x: wx / n, y: wy / n, n, pts });
+    }
+    cl = out;
+  }
+  const G = state.index.groups.length;
+  cl.sort((a, b) => b.n - a.n || a.pts[0] - b.pts[0]);
+  state.pointCluster = new Int32Array(state.points.length).fill(-1);
+  cl.forEach((c, k) => {
+    c.counts = new Int32Array(G);
+    for (const p of c.pts) {
+      state.pointCluster[p] = k;
+      for (let g = 0; g < G; g++) c.counts[g] += state.pointCounts[p * G + g];
+    }
+  });
+  state.clusters = cl;
+  state.clusterKey = key;
+  return cl;
+}
+
 function mapHitTest(px, py) {
   // Reverse draw order: the smallest circles are drawn last, so on top.
-  for (let k = state.drawOrder.length - 1; k >= 0; k--) {
-    const p = state.drawOrder[k];
-    const pt = state.points[p];
-    const r = Math.max(MAP_MIN_HIT, state.sizeK * Math.sqrt(state.pointTotals[p]));
-    const dx = px - mapX(pt.x), dy = py - mapY(pt.y);
-    if (dx * dx + dy * dy <= r * r) return p;
+  // Returns a cluster index; a cluster of one is a single place.
+  const cl = mapClusters();
+  for (let k = cl.length - 1; k >= 0; k--) {
+    const c = cl[k];
+    const r = Math.max(MAP_MIN_HIT, state.sizeK * Math.sqrt(c.n));
+    const dx = px - mapX(c.x), dy = py - mapY(c.y);
+    if (dx * dx + dy * dy <= r * r) return k;
   }
   return -1;
+}
+
+/* Clicking a merged circle zooms in rather than opening a panel for places
+ * that only share a circle at this zoom: far enough that its closest two
+ * members fall outside each other's merge reach, but no further than fits
+ * them all on screen or 8x in one click (fitting three nearby buildings
+ * jumped straight from 3.5 to the 60 px/km maximum), and always at least 2x,
+ * so a click makes progress. */
+function zoomToCluster(c) {
+  const mv = state.mapView;
+  const e = extent(c.pts);
+  let dmin = Infinity;  // km, closest pair of members (distinct points, so > 0)
+  for (let a = 0; a < c.pts.length; a++) {
+    const pa = state.points[c.pts[a]];
+    for (let b = a + 1; b < c.pts.length; b++) {
+      const pb = state.points[c.pts[b]];
+      const d = Math.hypot(pa.x - pb.x, pa.y - pb.y);
+      if (d < dmin) dmin = d;
+    }
+  }
+  const separate = (1.1 * MAP_MERGE_PX) / dmin;
+  const target = Math.max(mv.scale * 2, Math.min(separate, fitScale(c.pts), mv.scale * 8));
+  mv.scale = clamp(target, mapMinScale(), MAP_MAX_SCALE);
+  mv.cx = (e.x0 + e.x1) / 2;
+  mv.cy = (e.y0 + e.y1) / 2;
+  state.mapHover = -1;
+  $('tooltip').classList.remove('visible');
+  draw();
+}
+
+function clickMap(px, py) {
+  const k = mapHitTest(px, py);
+  if (k < 0) return closePlace();
+  const c = state.clusters[k];
+  if (c.pts.length === 1) openPlace(c.pts[0]);
+  else zoomToCluster(c);
 }
 
 function mapMouseMove(e) {
@@ -1200,6 +1331,9 @@ function zoomMap(px, py, k) {
   const x = (px - W / 2) / mv.scale + mv.cx;
   const y = (py - H / 2) / mv.scale + mv.cy;
   mv.scale = clamp(mv.scale * k, mapMinScale(), MAP_MAX_SCALE);
+  // Circles re-merge at the new zoom, so a hovered circle index is stale.
+  state.mapHover = -1;
+  $('tooltip').classList.remove('visible');
   mv.cx = x - (px - W / 2) / mv.scale;
   mv.cy = y - (py - H / 2) / mv.scale;
 }
@@ -1234,9 +1368,12 @@ function fmtCoord(pt) {
     `${Math.abs(pt.lon)}° ${pt.lon >= 0 ? 'E' : 'W'}`;
 }
 
-function updateMapTooltip(p, px, py) {
+function updateMapTooltip(k, px, py) {
   const tip = $('tooltip');
-  if (p < 0) { tip.classList.remove('visible'); return; }
+  if (k < 0) { tip.classList.remove('visible'); return; }
+  const cl = state.clusters[k];
+  if (cl.pts.length > 1) return clusterTooltip(cl, px, py);
+  const p = cl.pts[0];
   const sites = placeSites(p);
   const locs = [...new Set(sites.map((si) => state.index.sites[si].location).filter(Boolean))];
   const n = state.pointTotals[p];
@@ -1252,6 +1389,26 @@ function updateMapTooltip(p, px, py) {
     (sites.length > 1 ? ` in ${sites.length} collections` : '') + `</div>` +
     `<div class="tt-row">${taxa}</div>` +
     `<div class="tt-row">${fmtCoord(state.points[p])}</div>`;
+  tip.classList.add('visible');
+  positionTooltip(px, py);
+}
+
+function clusterTooltip(cl, px, py) {
+  const groups = state.index.groups;
+  const top = cl.pts.reduce((a, b) => (state.pointTotals[b] > state.pointTotals[a] ? b : a));
+  const nSites = cl.pts.reduce((t, p) => t + placeSites(p).length, 0);
+  const taxa = [...cl.counts.entries()].filter(([, c]) => c).sort((a, b) => b[1] - a[1])
+    .map(([g, c]) =>
+      `<span class="swatch" style="display:inline-block;width:8px;height:8px;border-radius:2px;` +
+      `background:var(--${groups[g]})"></span> ${esc(groups[g])} ${c.toLocaleString()}`)
+    .join(' · ');
+  const tip = $('tooltip');
+  tip.innerHTML =
+    `<div class="tt-title">${cl.pts.length.toLocaleString()} places merged at this zoom</div>` +
+    `<div class="tt-row">largest: ${esc(placeLabel(top))}</div>` +
+    `<div class="tt-years">${cl.n.toLocaleString()} logs in ${nSites.toLocaleString()} collections</div>` +
+    `<div class="tt-row">${taxa}</div>` +
+    `<div class="tt-row">click to zoom in</div>`;
   tip.classList.add('visible');
   positionTooltip(px, py);
 }
