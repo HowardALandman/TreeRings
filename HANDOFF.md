@@ -16,6 +16,25 @@ stands (2026-10-24); next focus is data, chiefly the pre-5408 BC gap (see
 placed by their published calendar anchor), parser cross-validates against
 dplR at 100%. Live first load 655,918 bytes (README, "Payload size").
 
+## Expanded-Europe test build (2026-10-24, test branch only, deployment `816940ab`)
+
+Plan C, step A: expanded Europe (`ehd/region.py`, 47 named places pinned in
+`tests/test_region.py`) + PANGAEA's Hohenheim archive (`ehd/pangaea.py`).
+`corpus.scoped_files` is the one file choice used by build, harvest and
+validate: europe/ whole, africa/ asia/ atlantic/ by coordinates → 2,068 + 90 +
+186 files. **123,370 plotted** = 73,390 as before (every old log and site record
+unchanged, checked by payload diff) + 11,796 new ITRDB + 38,184 PANGAEA. PANGAEA
+exclusions all counted (53,094 total): Schweingruber 13,003 (= ITRDB), no span
+1,545, floating 257, same timbers as an ITRDB site 86 (rule: ≥3 exact span
+matches, genus and place ≤0.2°; germ069 = HOF12184), duplicates 14, bad spans 4,
+out of region 1. dplR 76,397 series, 100%; 12,349 ours only. Harvest now pulls
+all tree-ring studies on purpose (6,616 in-scope files, 2 without a record).
+First paint 1.23 MB (was 0.63); index.json 6.17 MB raw; 8,497 shards; draw 11 ms,
+era repack 14 ms on the M4. **Crowding:** the map's southern Germany is
+thousands of overlapping small circles (one per Hohenheim object) — the main
+thing to fix before production. `web/index.html` head counts updated for this
+build. Not done: step B (global).
+
 ## Direction (Howard, 2026-10-24)
 
 - **Why the project exists:** one of Howard's original aims is a clear,

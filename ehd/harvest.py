@@ -37,6 +37,7 @@ import sys
 import urllib.parse
 
 from . import config, fetch
+from . import corpus as corpus_mod
 
 PAGE = 2000
 
@@ -181,8 +182,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("enumerating ITRDB europe/ directory (source A)...")
     listing = fetch.list_europe_index()
-    corpus = set(fetch.list_europe_files(listing))
-    print(f"  {len(corpus)} .rwl files")
+    print(f"  {len(fetch.list_europe_files(listing))} .rwl files")
     # Snapshot the listing's per-file dates and sizes.  This is the baseline
     # `fetch --refresh` compares against, and it is the only record of when the
     # archive last touched a file we hold.
@@ -190,15 +190,22 @@ def main(argv: list[str] | None = None) -> int:
     with open(listing_path, "w") as fh:
         json.dump(listing, fh)
     print(f"  listing snapshot -> {listing_path}")
+    # The corpus is every file of every in-scope site, in every folder the
+    # build reads - the same decision ehd.corpus makes, so the two agree.
+    scoped = corpus_mod.scoped_paths()
+    dir_of = {os.path.basename(p): os.path.dirname(p)
+              for paths in scoped.values() for p in paths}
+    corpus = set(dir_of)
+    print(f"  in scope: {len(corpus)} .rwl files "
+          f"({', '.join(f'{f} {len(v)}' for f, v in scoped.items())})")
 
     print("harvesting NCEI study metadata (source B)...")
-    studies = paginate(
-        {
-            "dataTypeId": 18,
-            "locationName": "Continent>Europe",
-            "limit": PAGE,
-        }
-    )
+    # No location filter.  This used to send locationName=Continent>Europe,
+    # which the API silently ignores (2026-10-24: it returns the same records
+    # as no filter at all), so the harvest has always pulled every tree-ring
+    # study; now that the build reads several ITRDB folders that is what it
+    # needs, and saying so is better than a filter that does nothing.
+    studies = paginate({"dataTypeId": 18, "limit": PAGE})
     print(f"  {len(studies)} study records")
 
     # Join on filename.  One study can back several files (earlywood/latewood
@@ -214,10 +221,9 @@ def main(argv: list[str] | None = None) -> int:
     # This is where withdrawn studies are found (see the module docstring), so a
     # lookup that fails aborts the harvest rather than leaving a gap: a missing
     # record here would plot a withdrawn study as if it were live.
-    raw_dir = config.path(config.RAW, "itrdb", "europe")
     unlisted: list[str] = []  # record found, but it no longer lists the file
     for name in sorted(corpus - set(by_file)):
-        study_id = study_id_from_files(raw_dir, name[: -len(".rwl")])
+        study_id = study_id_from_files(dir_of[name], name[: -len(".rwl")])
         if not study_id:
             continue
         study = fetch_study(study_id)
@@ -237,7 +243,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  files with metadata (A n B): {len(covered)}  "
           f"({100 * len(covered) / max(len(corpus), 1):.1f}%)")
     print(f"  corpus files w/o metadata  : {len(uncovered)}")
-    print(f"  metadata for non-corpus    : {len(extra)} (non-European studies)")
+    print(f"  metadata for non-corpus    : {len(extra)} (studies outside the build)")
     if uncovered:
         print("  examples lacking metadata  :", ", ".join(sorted(uncovered)[:10]))
     print(f"  withdrawn by NCEI          : {len(withdrawn)}")

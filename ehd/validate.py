@@ -66,15 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     logs, stats = corpus.build_logs()
     print(f"  {stats.n_logs} logs from {stats.n_files_used} files")
 
-    raw_dir = config.path(config.RAW, "itrdb", "europe")
-    selected = corpus.select_files(
-        sorted(
-            os.path.join(raw_dir, f)
-            for f in os.listdir(raw_dir)
-            if f.endswith(".rwl")
-        ),
-        corpus.CorpusStats(),
-    )
+    # The same file choice the build makes, across every folder in scope.
+    selected = corpus.scoped_files()
     paths = sorted(selected.values())
 
     out_csv = os.path.join(config.path(config.INTERIM), "dplr_reference.csv")

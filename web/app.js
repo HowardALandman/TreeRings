@@ -114,6 +114,10 @@ async function load() {
     `(${s.files_skipped_noaa.toLocaleString()} duplicate encodings, ` +
     `${s.files_skipped_variant.toLocaleString()} variant measurements skipped)`;
   $('f-provenance').textContent =
+    (s.pangaea_plotted
+      ? `${s.pangaea_plotted.toLocaleString()} timbers from the Hohenheim archive on PANGAEA, ` +
+        'drawn from public metadata (ring widths restricted) · '
+      : '') +
     (s.logs_anchored
       ? `${s.logs_anchored.toLocaleString()} floating logs placed by their published calendar anchor · `
       : '') +
@@ -772,8 +776,10 @@ async function showDetail(i) {
     ['Elevation', site.elev ? site.elev + ' m' : ''],
     ['Measurement', site.variant],
     ['Collected by', site.who],
-    ['ITRDB code', site.code],
+    site.restricted ? ['Source', 'PANGAEA'] : ['ITRDB code', site.code],
     ['Dating', datingBadge(site)],
+    ['Ring widths', site.restricted
+      ? `<span class="badge restricted">restricted</span> ${esc(site.restricted)}` : ''],
     ['Study', site.url ? `<a href="${esc(site.url)}" target="_blank" rel="noopener">${esc(site.study || site.code)}</a>` : esc(site.study)],
     [site.dois && site.dois.length > 1 ? 'DOIs' : 'DOI', (site.dois || [])
       .map((d) => `<a href="https://doi.org/${esc(d)}" target="_blank" rel="noopener">${esc(d)}</a>`)
@@ -781,20 +787,35 @@ async function showDetail(i) {
   ];
   $('d-fields').innerHTML = rows
     .filter(([, v]) => v)
-    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${k === 'Dating' || k === 'Study' || k.startsWith('DOI') ? v : esc(v)}</dd>`)
+    .map(([k, v]) => `<dt>${esc(k)}</dt><dd>${HTML_ROWS.has(k) || k.startsWith('DOI') ? v : esc(v)}</dd>`)
     .join('');
 
   $('detail').classList.add('open');
+  $('spark').hidden = !!site.restricted;  // nothing to draw; the caption says why
   drawSparkline(null);
   try {
     const site_code = site.code.toLowerCase();
     const data = await fetch(`data/values/${site_code}.json`).then((r) => r.json());
+    if (state.selected !== i) return;  // another log was clicked meanwhile
     const rec = data[seriesId];
-    if (rec) drawSparkline(rec);
+    if (rec && !rec.v) {
+      // PANGAEA: no ring widths to draw - the record's own link, and any
+      // caveat on the span, in their place.
+      const extra = [
+        ['Record', rec.r ? `<a href="https://doi.org/${esc(rec.r)}" target="_blank" rel="noopener">${esc(rec.r)}</a>` : ''],
+        ['Span note', rec.n ? esc(rec.n) : ''],
+      ].filter(([, v]) => v).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+      $('d-fields').insertAdjacentHTML('beforeend', extra);
+      drawSparkline(null, 'Ring widths are held by the depositor and not public; ' +
+        'this bar is drawn from the record\'s public metadata.');
+    } else if (rec) drawSparkline(rec);
   } catch (err) {
     $('d-spark-caption').textContent = 'ring widths unavailable';
   }
 }
+
+// Detail rows whose values are built as HTML above (everything else is escaped).
+const HTML_ROWS = new Set(['Dating', 'Study', 'Ring widths']);
 
 function datingBadge(site) {
   const d = site.dating;
@@ -811,7 +832,7 @@ function datingBadge(site) {
   return '<span class="badge">absolutely dated</span>';
 }
 
-function drawSparkline(rec) {
+function drawSparkline(rec, message) {
   const c = $('spark');
   const dpr = window.devicePixelRatio || 1;
   const w = c.clientWidth || 300, h = 76;
@@ -821,7 +842,7 @@ function drawSparkline(rec) {
   const css = getComputedStyle(document.documentElement);
   g.clearRect(0, 0, w, h);
 
-  if (!rec) { $('d-spark-caption').textContent = 'loading ring widths…'; return; }
+  if (!rec) { $('d-spark-caption').textContent = message || 'loading ring widths…'; return; }
 
   const v = rec.v;
   const real = v.filter((x) => x != null);

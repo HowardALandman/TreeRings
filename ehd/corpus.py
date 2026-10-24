@@ -30,7 +30,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from . import anchors, config
+from . import anchors, config, region
 from .rwl import Series, parse_rwl
 
 # Site codes always end in digits; anything after that is a variable suffix.
@@ -147,6 +147,13 @@ class Log:
     # NCEI's removal statement if the study has been withdrawn; such logs are
     # parsed and validated but never plotted.
     withdrawn: str = ""
+    # Where the log comes from.  "PANGAEA" logs (ehd/pangaea.py) are drawn from
+    # public metadata alone: ``values`` is empty and ``restricted`` holds the
+    # depositor's access terms, so the viewer shows those instead of a curve.
+    source: str = "ITRDB"
+    restricted: str = ""
+    record_doi: str = ""   # this log's own record, where each log has one
+    span_note: str = ""    # caveat on the span itself, shown with it
 
     @property
     def n_rings(self) -> int:
@@ -166,6 +173,11 @@ class CorpusStats:
     n_anchored: int = 0
     n_disputed: int = 0
     n_withdrawn: int = 0
+    # Sites in non-curated ITRDB folders whose coordinates fall outside
+    # region.in_scope, or that have none; never parsed.
+    n_sites_out_of_scope: int = 0
+    n_sites_no_position: int = 0
+    files_by_folder: dict[str, int] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     # file -> template DOI its study record does not list (see choose_dois)
     doi_conflicts: dict[str, str] = field(default_factory=dict)
@@ -413,19 +425,97 @@ def classify(species_code: str, latin: str = "") -> tuple[str, str]:
     return genus, common or "other"
 
 
-def build_logs(raw_dir: str | None = None, limit: int = 0):
-    """Parse the corpus into deduplicated Log records with metadata attached."""
-    raw_dir = raw_dir or config.path(config.RAW, "itrdb", "europe")
-    stats = CorpusStats()
+# ITRDB folders that can hold sites inside the build's region.  europe/ is
+# NCEI's curated set and is taken whole (every file in it lies inside the
+# region, checked 2026-10-24); the others hold European Russia, the Caucasus,
+# the Levant and the Maghreb alongside sites far outside, so each of their
+# sites is admitted only on its coordinates.  See ehd/region.py.
+CURATED_FOLDER = "europe"
+SCOPE_FOLDERS = ("europe", "africa", "asia", "atlantic")
 
-    paths = sorted(glob.glob(os.path.join(raw_dir, "*.rwl")))
-    stats.n_files_listed = len(paths)
-    chosen = select_files(paths, stats)
 
-    api_meta: dict[str, dict] = {}
+def load_api_meta() -> dict[str, dict]:
     meta_path = os.path.join(config.path(config.INTERIM), "study_metadata.json")
     if os.path.exists(meta_path):
-        api_meta = json.load(open(meta_path)).get("by_file", {})
+        return json.load(open(meta_path)).get("by_file", {})
+    return {}
+
+
+def _site_of(path: str) -> str:
+    """The key select_files files a path under."""
+    split = split_site_variant(os.path.basename(path))
+    return split[0] if split else os.path.basename(path)[:-4]
+
+
+def scoped_paths(stats: CorpusStats | None = None,
+                 api_meta: dict[str, dict] | None = None,
+                 folders: tuple[str, ...] = SCOPE_FOLDERS) -> dict[str, list[str]]:
+    """``{folder: [every .rwl path of every in-scope site]}``, variants and
+    legacy templates included - the set ``ehd.harvest`` must find records for."""
+    stats = stats if stats is not None else CorpusStats()
+    api_meta = api_meta if api_meta is not None else load_api_meta()
+    out: dict[str, list[str]] = {}
+    for folder in folders:
+        d = config.path(config.RAW, "itrdb", *folder.split("/"))
+        paths = sorted(glob.glob(os.path.join(d, "*.rwl")))
+        if folder != CURATED_FOLDER:
+            keep = set()
+            for site, p in select_files(paths, CorpusStats()).items():
+                meta = read_template_header(p)
+                api = api_meta.get(os.path.basename(p)) or {}
+                lat, lon = meta.get("lat", api.get("lat")), meta.get("lon", api.get("lon"))
+                if lat is None or lon is None:
+                    stats.n_sites_no_position += 1
+                elif region.in_scope(lat, lon):
+                    keep.add(site)
+                else:
+                    stats.n_sites_out_of_scope += 1
+            paths = [p for p in paths if _site_of(p) in keep]
+        out[folder] = paths
+    return out
+
+
+def scoped_files(stats: CorpusStats | None = None,
+                 api_meta: dict[str, dict] | None = None,
+                 folders: tuple[str, ...] = SCOPE_FOLDERS) -> dict[str, str]:
+    """``{site: path}``, one file per site, across the folders in scope.
+
+    The single place that decides which files are in the build, used by the
+    build itself, by ``ehd.validate`` and by ``ehd.harvest`` so the three
+    cannot disagree.  Stats count only the files of in-scope sites, so
+    "files listed" means the same thing it meant when europe/ was the corpus.
+    """
+    stats = stats if stats is not None else CorpusStats()
+    chosen: dict[str, str] = {}
+    for folder, paths in scoped_paths(stats, api_meta, folders).items():
+        sub = CorpusStats()
+        sel = select_files(paths, sub)
+        stats.n_files_listed += len(paths)
+        stats.n_files_skipped_noaa += sub.n_files_skipped_noaa
+        stats.n_files_skipped_variant += sub.n_files_skipped_variant
+        stats.n_files_unmatched += sub.n_files_unmatched
+        stats.files_by_folder[folder] = len(sel)
+        clash = set(sel) & set(chosen)
+        if clash:
+            # Site codes are unique across the archive by convention only.
+            raise RuntimeError(f"site codes in {folder}/ also seen elsewhere: {sorted(clash)[:5]}")
+        chosen.update(sel)
+    return chosen
+
+
+def build_logs(raw_dir: str | None = None, limit: int = 0):
+    """Parse the corpus into deduplicated Log records with metadata attached.
+
+    ``raw_dir`` restricts the build to one folder's files, unscoped (tests).
+    """
+    stats = CorpusStats()
+    api_meta = load_api_meta()
+    if raw_dir:
+        paths = sorted(glob.glob(os.path.join(raw_dir, "*.rwl")))
+        stats.n_files_listed = len(paths)
+        chosen = select_files(paths, stats)
+    else:
+        chosen = scoped_files(stats, api_meta)
 
     logs: list[Log] = []
     for site in sorted(chosen) if not limit else sorted(chosen)[:limit]:

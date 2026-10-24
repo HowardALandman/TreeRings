@@ -24,7 +24,7 @@ import json
 import os
 import sys
 
-from . import compress, config, corpus, pack
+from . import compress, config, corpus, pack, pangaea
 
 # Band order on screen.  This is also the categorical colour order, chosen so
 # that the three warm hues are never adjacent - see the palette validation in
@@ -109,8 +109,16 @@ def main(argv: list[str] | None = None) -> int:
     for site in sorted({log.site for log in withdrawn} - corpus.KNOWN_WITHDRAWN):
         print(f"  newly withdrawn, not yet in KNOWN_WITHDRAWN: {site}")
 
+    # Second source: PANGAEA's Hohenheim archive (HISTRA), from public metadata
+    # only.  Built against the ITRDB logs so timbers deposited in both are
+    # drawn once, from the ITRDB copy that has ring widths.
+    pg_logs, pg_report = pangaea.build_logs(itrdb_logs=logs)
+    print("  PANGAEA records:")
+    for k, v in sorted(pg_report.items(), key=lambda kv: -kv[1]):
+        print(f"    {v:7}  {k}")
+
     live = [log for log in logs if not log.withdrawn]
-    plotted = [log for log in live if log.dating != "floating"]
+    plotted = [log for log in live if log.dating != "floating"] + pg_logs
     floating = [log for log in live if log.dating == "floating"]
     anchored = [log for log in live if log.dating == "anchored"]
     disputed = [log for log in live if log.dating == "disputed"]
@@ -199,8 +207,12 @@ def main(argv: list[str] | None = None) -> int:
                 "dois": log.dois,
                 "url": log.url,
                 "dating": log.dating,
-                "variant": corpus.VARIANT_LABEL.get(log.variant, log.variant),
+                "variant": corpus.VARIANT_LABEL.get(log.variant, log.variant)
+                if log.source == "ITRDB" else "",
                 **anchor,
+                # Only on PANGAEA sites, which have no ring widths to show.
+                **({"source": log.source, "restricted": log.restricted}
+                   if log.source != "ITRDB" else {}),
             }
         )
 
@@ -228,6 +240,10 @@ def main(argv: list[str] | None = None) -> int:
             "sites_withdrawn": len({log.site for log in withdrawn}),
             "n_sites": len(sites),
             "warnings": len(stats.warnings),
+            "files_by_folder": stats.files_by_folder,
+            "pangaea_plotted": len(pg_logs),
+            "pangaea_sites": len({log.site for log in pg_logs}),
+            "pangaea_excluded": {k: v for k, v in pg_report.items() if k != "plotted"},
         },
     }
     index_path = os.path.join(web_data, "index.json")
@@ -238,6 +254,14 @@ def main(argv: list[str] | None = None) -> int:
     # --- ring widths, sharded by site ---------------------------------------
     shards: dict[str, dict[str, list]] = {}
     for log in plotted:
+        if log.source != "ITRDB":
+            # No ring widths: the record's own DOI and any caveat on its span,
+            # which the viewer shows in place of the curve.
+            entry = {"f": log.first_year, "r": log.record_doi}
+            if log.span_note:
+                entry["n"] = log.span_note
+            shards.setdefault(log.site, {})[log.series_id] = entry
+            continue
         # "u" is mm per unit of "v".  206 files measure in 0.001 mm; without
         # it the viewer read every one of them as 0.01 mm, ten times too wide.
         if log.precision_mm not in (0.01, 0.001):

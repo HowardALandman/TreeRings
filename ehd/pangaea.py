@@ -110,6 +110,9 @@ def parse_record(hit: dict) -> dict:
     code = _SPECIES_CODE.search(comment)
     tsp = _TITLE_SPECIES.search(title)
     floating = bool(re.search(r"floating|relative time ?scale", comment, re.I))
+    ev = re.search(r"<md:event\b.*?</md:event>", xml, re.S)
+    ev = ev.group(0) if ev else ""
+    kind = re.search(r"(historical object|living tree|subfossil tree) samples?\b", title)
     return {
         "id": hit["_id"],
         "doi": (s.get("URI") or "").replace("https://doi.org/", ""),
@@ -126,10 +129,20 @@ def parse_record(hit: dict) -> dict:
         "n_rings": int(rings.group(1)) if rings else None,
         "floating": floating,
         "undated": "not determined" in comment.lower(),
+        "object": _tag(ev, "label"),
+        "place": _tag(re.search(r"<md:location\b.*?</md:location>", ev, re.S).group(0)
+                      if "<md:location" in ev else "", "name"),
+        "campaign": _tag(re.search(r"<md:campaign\b.*?</md:campaign>", ev, re.S).group(0)
+                         if "<md:campaign" in ev else "", "label"),
+        "sample": (re.search(r"sample (\S+?),? ", title + " ") or re.search(r"sample (\S+)$", title)
+                   or re.search(r"(\S+)$", title)).group(1).rstrip(","),
+        "kind": kind.group(1) if kind else "",
         "lat": pos.get("lat"), "lon": pos.get("lon"),
         "elevation": s.get("minElevation"),
         "login_option": s.get("sp-loginOption"),
-        "license": _tag(xml, "license"),
+        # The readable name only: the label ("UNKNOWN") is a code.
+        "license": _tag(re.search(r"<md:license\b.*?</md:license>", xml, re.S).group(0)
+                        if "<md:license" in xml else "", "name"),
         "n_points": s.get("nDataPoints"),
     }
 
@@ -166,6 +179,121 @@ def report(recs: list[dict]) -> None:
     print(f"  no span and not 'not determined': {len(unparsed)}")
     for k, v in c(r["comment"][:60] for r in unparsed).most_common(12):
         print(f"    {v:6}  {k!r}")
+
+
+# --- logs for the build -----------------------------------------------------
+
+# Werner Schweingruber's open PANGAEA series are his ITRDB network again
+# (2026-10-24: swit131 and roma004 match sample for sample, span for span; 95%
+# of all match on span and place).  Importing them would double-count.
+DUPLICATES_OF_ITRDB = re.compile(r"Schweingruber", re.I)
+
+# Preßler's spans are one year longer than his own ring counts in 3,409 of
+# 3,422 records; which end is off cannot be told without the ring widths.
+PRESSLER_NOTE = ("Depositor's span is one year longer than its ring count, "
+                 "as for nearly all of this laboratory's records; one end may be off by a year.")
+
+RESTRICTED_NOTE = ("Ring widths are access-restricted by the depositor; this bar is "
+                   "drawn from the record's public metadata (species, place, dated span).")
+
+
+# An object and an ITRDB site are the same timbers when at least this many of
+# their spans match exactly, with genus and place agreeing.  2026-10-24: ITRDB
+# germ069 (Wilson, "Regensburg Dom Historical Timbers") is 22 of Hofmann's 83
+# Regensburg samples (HOF12184), span for span; ~90 such matches in all
+# against ~7 expected by chance, which shows up as isolated single matches
+# between unrelated objects and sites.
+SAME_TIMBERS_MIN_MATCHES = 3
+SAME_PLACE_DEG = 0.2
+
+
+def itrdb_duplicates(logs: list, itrdb_logs: list) -> set[str]:
+    """Keys of PANGAEA logs that are ITRDB logs again; the ITRDB copy, which
+    carries ring widths, is the one kept."""
+    by_span: dict[tuple[int, int], list] = collections.defaultdict(list)
+    for x in itrdb_logs:
+        if x.lat is not None and x.lon is not None:
+            by_span[(x.first_year, x.last_year)].append(x)
+    pairs: dict[tuple[str, str], list[str]] = collections.defaultdict(list)
+    for log in logs:
+        for x in by_span.get((log.first_year, log.last_year), ()):
+            if (x.genus == log.genus and abs(x.lat - log.lat) < SAME_PLACE_DEG
+                    and abs(x.lon - log.lon) < SAME_PLACE_DEG):
+                pairs[(log.site, x.site)].append(log.key)
+    return {k for keys in pairs.values() if len(keys) >= SAME_TIMBERS_MIN_MATCHES for k in keys}
+
+
+def build_logs(recs: list[dict] | None = None, itrdb_logs: list | None = None):
+    """``(logs, report)``: plottable PANGAEA logs and a count of every exclusion."""
+    from . import corpus, region  # corpus imports nothing from here
+
+    if recs is None:
+        recs = json.load(open(config.path(config.INTERIM, "pangaea_treering.json")))
+    report: collections.Counter = collections.Counter()
+    seen: dict[tuple[str, str], int] = {}
+    logs = []
+    for r in sorted(recs, key=lambda r: int(r["id"])):
+        if DUPLICATES_OF_ITRDB.search(r["author"] or ""):
+            report["duplicate of ITRDB (Schweingruber)"] += 1
+            continue
+        if r["first"] is None:
+            report["no dated span"] += 1
+            continue
+        if r["first"] == 0 and r["last"] == 0:
+            report["placeholder span 0-0"] += 1
+            continue
+        if r["last"] < r["first"]:
+            report["last year before first"] += 1
+            continue
+        if r["floating"]:
+            report["floating (relative years)"] += 1
+            continue
+        if not region.in_scope(r["lat"], r["lon"]):
+            report["outside the region or no position"] += 1
+            continue
+        obj = r["object"] or r["sample"].split("-")[0].split("/")[0]
+        key = (obj, r["sample"])
+        if key in seen:
+            report["same sample deposited twice"] += 1
+            continue
+        seen[key] = int(r["id"])
+        genus, group = corpus.classify(r["species_code"], r["species_name"])
+        pressler = r["author"].startswith("Preßler")
+        logs.append(corpus.Log(
+            key=f"pg-{obj.lower()}/{r['sample']}",
+            site=f"pg-{obj.lower()}",
+            series_id=r["sample"],
+            first_year=r["first"],
+            last_year=r["last"],
+            n_measured=r["n_rings"] or (r["last"] - r["first"] + 1),
+            values=[],
+            variant="",
+            species_code=r["species_code"],
+            species_name=r["species_name"],
+            genus=genus,
+            group=group,
+            site_name=r["place"] or obj,
+            location=r["place"],
+            lat=r["lat"], lon=r["lon"],
+            elevation=str(r["elevation"] or ""),
+            investigators=r["author"],
+            study_name=(f"{r['project']} - Historical and Postglacial Tree Ring Archive "
+                        f"of Hohenheim, object {obj} ({r['kind'] or 'sample'}s)")
+                       if r["project"] == "HISTRA" else (r["project"] or ""),
+            dois=[],
+            url="",
+            dating="absolute",
+            source="PANGAEA",
+            restricted=r["license"] or "access restricted",
+            record_doi=r["doi"],
+            span_note=PRESSLER_NOTE if pressler else "",
+        ))
+    if itrdb_logs is not None:
+        dup = itrdb_duplicates(logs, itrdb_logs)
+        logs = [log for log in logs if log.key not in dup]
+        report["same timbers as an ITRDB site"] = len(dup)
+    report["plotted"] = len(logs)
+    return logs, report
 
 
 def main(argv: list[str] | None = None) -> int:
