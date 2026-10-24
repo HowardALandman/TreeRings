@@ -30,6 +30,18 @@ Heidelberg .fh, TRiDaS, or a database export):
   - the taxon and the site or find location of each series;
   - whether each series is calendar-dated or floating, and on what basis.
 
+Much of the Hohenheim archive is already deposited at PANGAEA, under the
+project HISTRA ("Historical and Postglacial Tree Ring Archive of Hohenheim"),
+with access restricted: about 40,000 single-timber series by J. Hofmann,
+H.-J. Bleyer, M. Friedrich and E. Preßler, including the 257 Late Glacial
+subfossil pines of Friedrich, Kromer, Kaiser et al. (2001,
+doi:10.1594/PANGAEA.787724). Their public metadata gives each timber's
+species, place and dated span, and I plan to draw them from that alone,
+marked as restricted, with the ring widths left where they are. If CEZA can
+authorise release of the measurements, or tell me who can, that would be the
+simplest route. I could not find the Holocene subfossil oak and Preboreal
+pine series there, and they are not represented anywhere public.
+
 Some questions:
 
  1. Is any part of the measurement collection cleared for release, or is it

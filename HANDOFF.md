@@ -16,6 +16,33 @@ stands (2026-10-24); next focus is data, chiefly the pre-5408 BC gap (see
 placed by their published calendar anchor), parser cross-validates against
 dplR at 100%. Live first load 655,918 bytes (README, "Payload size").
 
+## Direction (Howard, 2026-10-24)
+
+- **Why the project exists:** one of Howard's original aims is a clear,
+  checkable refutation of Flood Geology, which is why a complete *overlapping*
+  series matters. The project has since become a tool with users, so the
+  standard is to present what is available cleanly, completely and without
+  selection bias — gather even-handedly, never aim at a date range.
+- **Scope of the web build: expanded Europe** = the Western Palearctic as
+  discussed: Europe to the Urals, Turkey, Cyprus, the Caucasus (Georgia,
+  Armenia, Azerbaijan), the Levant, Iran's Caspian forests, North Africa north
+  of the Sahara, Macaronesia. Defined on site coordinates, not ITRDB folders.
+  Howard sees no a priori reason to stop at Asia: the line should eventually
+  have a scientific basis (are series either side comparable?), which is the
+  consistency check below. All ITRDB folders are mirrored for study
+  (`fetch --all`).
+- **PANGAEA's restricted tree-ring deposits:** use their *public* metadata
+  (species, coordinates, dated span) to draw bars, and show the restricted
+  status in the detail view. Ring widths stay with the depositors.
+- **TODO — do series alignment (crossdating) ourselves.** Today every log's
+  date is the depositor's. Recomputing alignments from ring widths would let
+  the tool verify the overlaps instead of asserting them — central to the
+  aim above.
+- **TODO — consistency check on ring-width series alignments**, later: do
+  series that the archive places on the same years actually crossdate, within
+  and across regions? This is also the evidence for (or against) any
+  geographic line.
+
 Test deploys: `npx wrangler@4.124.0 pages deploy web/ --project-name ehd
 --branch test` → `https://test.ehd-612.pages.dev`; `verify_deploy.py --origin
 https://test.ehd-612.pages.dev` runs 80 checks there (some are production-only).
@@ -295,7 +322,7 @@ inference:
 | Source | Result |
 |---|---|
 | ITRDB / NCEI | no Hohenheim study; only 14 measurement studies worldwide start before 3000 BC |
-| Zenodo, PANGAEA | nothing relevant |
+| Zenodo, PANGAEA | ~~nothing relevant~~ **wrong (2026-10-24):** PANGAEA holds Friedrich, Kromer, Kaiser et al. 2001, 257 subfossil Late Glacial/Holocene pines (`doi:10.1594/PANGAEA.787724`), access-restricted — and ~53,000 restricted historical-timber series from German labs. See `docs/data-survey.md` |
 | DCCD | service down (2026-08-18: `dendro.dans.knaw.nl` resolves to 194.171.144.80 and completes a TLS handshake, then the request fails). **2026-10-24: the name no longer resolves at all** (`dig` empty; `dans.knaw.nl` itself is up), so the holdings, if they survive, are somewhere else — ask DANS |
 | Billamboz German Neolithic oak (GERM021–031) | averaged `.crn` chronologies only, no per-log data |
 | Belfast Irish oak | in ITRDB only from 1531 CE |

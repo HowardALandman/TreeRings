@@ -1,12 +1,12 @@
-To: Frank Reinig <ADDRESS>
-Cc: Ulf Büntgen <ADDRESS>
+To: Frederick Reinig <reinig@geo.uni-mainz.de>
+Cc: Ulf Büntgen <ulf.buentgen@geog.cam.ac.uk>
 Subject: Calendar positions for the Swiss Late Glacial ITRDB files
          (SWIT195-198, SWIT240)
 
 Dear Dr. Reinig, dear Prof. Büntgen,
 
 I build an interactive view of the ITRDB's European measurement files: every
-individual log drawn as one bar on a shared calendar axis, 76,609 of them so
+individual log drawn as one bar on a shared calendar axis, 73,390 of them so
 far, at https://treerings.howardalandman.org. I am writing because the oldest
 material in the archive is also the material I cannot place, and your IntCal20
 work on the Swiss Late Glacial pines is, as far as I can tell, where the
@@ -31,7 +31,9 @@ My questions:
 
  1. Is there a published calendar position for each of these five files - the
     cal BP of the file's own ring 1, with its uncertainty - following the
-    IntCal20 placement? A pointer to a table or dataset would be ideal.
+    IntCal20 placement, or your 2025 Tree-Ring Research paper on dating
+    during the Younger Dryas, which I have not yet been able to read? A
+    pointer to a table or dataset would be ideal.
 
  2. Does the internal alignment of the ITRDB files still hold, or were any
     series re-crossdated or re-assigned in later work, so that a single offset

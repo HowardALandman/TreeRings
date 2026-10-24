@@ -1,4 +1,4 @@
-"""Download the ITRDB European measurement corpus.
+"""Download ITRDB measurement files: the European corpus, or every folder.
 
 Resumable and polite: existing files are skipped, failures are retried with
 backoff, and concurrency is kept low because this is a public research archive.
@@ -8,6 +8,12 @@ Usage:
     python -m ehd.fetch --templates # ... including the live NOAA template files
     python -m ehd.fetch --refresh   # re-download only what the server has changed
     python -m ehd.fetch --limit 40  # small subset, for developing the pipeline
+    python -m ehd.fetch --folder asia      # another measurements/ folder
+    python -m ehd.fetch --all              # every folder, for study
+
+Each folder is mirrored to ``raw/itrdb/<folder>``.  The European build reads
+only ``raw/itrdb/europe``; ``--all`` gathers the rest so it can be examined,
+and does not change what the build plots.
 """
 
 from __future__ import annotations
@@ -59,14 +65,20 @@ _HREF_RE = re.compile(r'href="([^"?/]+\.(?:rwl|txt))"')
 
 
 def list_europe_index() -> dict[str, tuple[str, int]]:
-    """``{filename: (server_mtime, size_bytes)}`` from the directory listing.
+    return list_index(config.ITRDB_EUROPE)
+
+
+def list_index(url: str) -> dict[str, tuple[str, int]]:
+    """``{filename: (server_mtime, size_bytes)}`` from a directory listing.
+
+    Subdirectories are listed too, with size -1 (the listing prints "-").
 
     The row parser is checked against a plain href scan of the same HTML before
     the result is returned.  A listing whose markup changes would otherwise make
     the row regex match nothing and report an empty archive as a successful run,
     which is the failure mode this whole module is written to avoid.
     """
-    html = _get(config.ITRDB_EUROPE).decode("utf-8", errors="replace")
+    html = _get(url).decode("utf-8", errors="replace")
     rows = _ROW_RE.findall(html)
     index = {name: (date.strip(), size.strip()) for name, date, size in rows}
     hrefs = set(_HREF_RE.findall(html))
@@ -147,13 +159,32 @@ def _looks_like_html(blob: bytes) -> bool:
     return head.startswith(b"<!doctype html") or head.startswith(b"<html")
 
 
-def download_one(name: str, dest_dir: str, force: bool = False) -> tuple[str, str]:
+# Derived per-file statistics (COFECHA output), not measurements.
+SKIP_FOLDERS = {"correlation-stats"}
+
+
+def walk_folders(rel: str = "") -> list[tuple[str, dict[str, tuple[str, int]]]]:
+    """``[(folder, index)]`` for every folder under ``measurements/`` that holds
+    files, found by following the listings rather than from a fixed list: the
+    archive adds per-study folders (miramont2025, vothrurup2026) beside the
+    regional ones, and a fixed list would silently miss the next one."""
+    index = list_index(f"{config.ITRDB_BASE}/{rel}")
+    files = {n: v for n, v in index.items() if v[1] >= 0}
+    dirs = sorted(n for n, v in index.items() if v[1] < 0 and n not in SKIP_FOLDERS)
+    out = [(rel.rstrip("/"), files)] if files and rel else []
+    for d in dirs:
+        out += walk_folders(f"{rel}{d}/")
+    return out
+
+
+def download_one(name: str, dest_dir: str, force: bool = False,
+                 base: str = config.ITRDB_EUROPE) -> tuple[str, str]:
     """Return (name, status) where status is stored | cached | missing | error."""
     dest = os.path.join(dest_dir, name)
     if not force and os.path.exists(dest) and os.path.getsize(dest) > 0:
         return name, "cached"
     try:
-        blob = _get(config.ITRDB_EUROPE + name)
+        blob = _get(base + name)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return name, "missing"
@@ -186,41 +217,60 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="re-download files the server has changed since we copied them",
     )
+    ap.add_argument("--folder", default="europe",
+                    help="measurements/ folder to mirror (default europe)")
+    ap.add_argument("--all", action="store_true",
+                    help="mirror every measurements/ folder, all file types")
     args = ap.parse_args(argv)
 
-    dest_dir = config.path(config.RAW, "itrdb", "europe")
-    os.makedirs(dest_dir, exist_ok=True)
+    if args.all:
+        folders = walk_folders()
+        print(f"ITRDB measurements/: {len(folders)} folders hold files "
+              f"(skipping {', '.join(sorted(SKIP_FOLDERS))})")
+    else:
+        folder = args.folder.strip("/")
+        folders = [(folder, list_index(f"{config.ITRDB_BASE}/{folder}/"))]
 
-    index = list_europe_index()
-    names = list_europe_files(index)
-    print(f"ITRDB europe directory lists {len(names)} .rwl files")
-    if args.templates:
-        templates = list_europe_templates(index)
-        print(f"  plus {len(templates)} live NOAA templates (*-rwl-noaa.txt)")
-        names += templates
-
+    jobs: list[tuple[str, str, str]] = []  # (name, dest_dir, base url)
     force = False
-    if args.refresh:
-        # Re-check every file we already hold, not just the ones we are about to
-        # download: the point is to catch server-side edits, and an edit that
-        # keeps the byte count (brit.rwl, 2026-08-19) is invisible to the
-        # "already present" test that normally skips them.
-        stale = stale_files(names, dest_dir, index)
-        print(f"  {len(stale)} file(s) changed on the server since our copy")
-        for n in stale[:20]:
-            print("    ", n)
-        names = stale
-        force = True
+    for folder, index in folders:
+        dest_dir = config.path(config.RAW, "itrdb", *folder.split("/"))
+        os.makedirs(dest_dir, exist_ok=True)
+        if args.all:
+            # Everything, for study: per-study folders use .txt/.csv/.zip, not .rwl.
+            names = sorted(index)
+        else:
+            names = list_europe_files(index)
+            print(f"ITRDB {folder} directory lists {len(names)} .rwl files")
+            if args.templates:
+                templates = list_europe_templates(index)
+                print(f"  plus {len(templates)} live NOAA templates (*-rwl-noaa.txt)")
+                names += templates
+        if args.refresh:
+            # Re-check every file we already hold, not just the ones we are about to
+            # download: the point is to catch server-side edits, and an edit that
+            # keeps the byte count (brit.rwl, 2026-08-19) is invisible to the
+            # "already present" test that normally skips them.
+            stale = stale_files(names, dest_dir, index)
+            print(f"  {folder}: {len(stale)} file(s) changed on the server since our copy")
+            for n in stale[:20]:
+                print("    ", n)
+            names = stale
+            force = True
+        if args.all:
+            print(f"  {folder:28} {len(names):6} files")
+        base = f"{config.ITRDB_BASE}/{folder}/"
+        jobs += [(n, dest_dir, base) for n in names]
 
     if args.limit:
-        names = names[: args.limit]
+        jobs = jobs[: args.limit]
 
     counts: dict[str, int] = {}
     errors: list[str] = []
     done = 0
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        futures = {pool.submit(download_one, n, dest_dir, force): n for n in names}
+        futures = {pool.submit(download_one, n, d, force, base): n for n, d, base in jobs}
         for fut in as_completed(futures):
             name, status = fut.result()
             key = status.split(":")[0]
@@ -229,9 +279,9 @@ def main(argv: list[str] | None = None) -> int:
                 errors.append(f"{name}: {status}")
             done += 1
             if done % 200 == 0:
-                print(f"  {done}/{len(names)} ...", flush=True)
+                print(f"  {done}/{len(jobs)} ...", flush=True)
 
-    print(f"\ndestination: {dest_dir}")
+    print(f"\ndestination: {config.path(config.RAW, 'itrdb')}")
     for k in sorted(counts):
         print(f"  {k:8} {counts[k]}")
     # Failures are reported, never swallowed: a silently short corpus would
