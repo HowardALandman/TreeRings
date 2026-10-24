@@ -4,17 +4,21 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: M1 complete, map view live (latest deploy `3f29b509`, commit
-`de73382`, 2026-10-18; verify_deploy 92/92).** Full pipeline runs end to end,
-**73,390 logs** (191 of them floating collections placed by their published
-calendar anchor), parser cross-validates against dplR at 100%. **Deployed
-2026-10-18** (commit `bcc3b53`, deployment `95753ba3.ehd-612.pages.dev`): the
-2026-10-18 rebuild plus the map view. `verify_deploy.py` 92/92; the new
-`app.js`/`style.css` match the build byte for byte; withdrawn-study shards 404.
-A second deploy the same day added: `og.jpg` recaptured from the map, the UI
-changes under "Map view" (Show on map, kept selections, 2-D wheel, bounded
-zoom-out, theme fix), and the printed-null fix. Howard checked them on
-localhost (Firefox, real wheel) first.
+**Status: M1 complete; latest production deploy 2026-10-22** (deployment
+`235d0882.ehd-612.pages.dev`, commit `c113dc5`; README `f6cf9aa` after).
+`verify_deploy.py` 92/92; `app.js`, `style.css`, `logs.bin`, `index.json` and
+the served page match the build byte for byte (payloads compared decoded).
+Since the 2026-10-18 deploys it adds: touch pan/pinch and the phone layout,
+DOIs from the study record, start-year packing, centred taxon labels, and the
+`#map` timeline fit (sections below). Howard is happy with the UI as it
+stands (2026-10-24); next focus is data, chiefly the pre-5408 BC gap (see
+"The Hohenheim question"). **73,390 logs** (191 of them floating collections
+placed by their published calendar anchor), parser cross-validates against
+dplR at 100%. Live first load 655,918 bytes (README, "Payload size").
+
+Test deploys: `npx wrangler@4.124.0 pages deploy web/ --project-name ehd
+--branch test` → `https://test.ehd-612.pages.dev`; `verify_deploy.py --origin
+https://test.ehd-612.pages.dev` runs 80 checks there (some are production-only).
 
 **Sharing / waiting on users (2026-10-18).** Howard announced the site ~20 days
 earlier on Facebook, X, Bluesky, r/treerings and r/sfwtrees. After the deploy,
@@ -24,7 +28,7 @@ Bluesky not yet checked. Next step is Howard's: wait for user comments, then
 triage them. The map was the first user request; the rest of the UI list is
 open.
 
-## Timeline changes of 2026-10-22 (on the test branch, not production)
+## Timeline changes of 2026-10-22 (deployed 2026-10-22)
 
 - **Packed by start year**, earliest first (was end year, latest first), in
   `ehd/pack.py` and the viewer's filtered repack. Howard's call after a
@@ -39,7 +43,7 @@ open.
 - Taxon labels centred on the visible part of their band, 15 px.
 - A page opened at `#map` now fits the timeline on its first showing.
 
-## Touch / phone support (2026-10-19, on the test branch, not production)
+## Touch / phone support (2026-10-19, deployed 2026-10-22)
 
 Howard's Android Chrome check (2026-10-19): taps select, panels open and close,
 view hand-off works, no stuck tooltip — but no pan or zoom at all (no touch
@@ -57,6 +61,9 @@ handlers; pinch zoomed the page) and the footer wrapped to 8 lines. Now:
   empty tap closes; footer 42 px vs 129 px expanded. **Real multi-touch is
   only testable on a phone.** Dispatched `mouseup` must target the canvas, not
   `window`, or its `offsetX` is window-relative and the hit test misses.
+- Howard's phone pass on the test deploy (2026-10-22) found one bug, the
+  unfitted timeline after a load at `#map` (pre-existing since the map view,
+  fixed), and nothing touch-specific; he signed off on the UI 2026-10-24.
 
 **Test deploys:** `npx wrangler@4.124.0 pages deploy web/ --project-name ehd
 --branch test` → `https://test.ehd-612.pages.dev` (stable alias, `noindex`,
@@ -199,7 +206,7 @@ slip, and the viewer still links it; tur091x.rwl is byte-identical to
 tur091t.rwl and the record lists only `t`; plus the earlier items under "Open
 audit findings".
 
-**DOIs now come from the study record (2026-10-19; on the test branch, not production).**
+**DOIs now come from the study record (2026-10-19; deployed 2026-10-22).**
 `harvest` read a `doi` key the API never sends — DOIs live under
 `publication[].identifier` — so 0 of 12,629 records had one and every DOI shown
 was the template's, unchecked. `corpus.choose_dois` now links every DOI the
@@ -289,12 +296,13 @@ inference:
 |---|---|
 | ITRDB / NCEI | no Hohenheim study; only 14 measurement studies worldwide start before 3000 BC |
 | Zenodo, PANGAEA | nothing relevant |
-| DCCD | service down (2026-08-18: `dendro.dans.knaw.nl` resolves to 194.171.144.80 and completes a TLS handshake, then the request fails — the host is alive, so ask DANS whether the holdings survived) |
+| DCCD | service down (2026-08-18: `dendro.dans.knaw.nl` resolves to 194.171.144.80 and completes a TLS handshake, then the request fails). **2026-10-24: the name no longer resolves at all** (`dig` empty; `dans.knaw.nl` itself is up), so the holdings, if they survive, are somewhere else — ask DANS |
 | Billamboz German Neolithic oak (GERM021–031) | averaged `.crn` chronologies only, no per-log data |
 | Belfast Irish oak | in ITRDB only from 1531 CE |
 
 The public record therefore has a hole where Hohenheim should be. Measured
-from the built payload (2026-09-26): **no log is alive between 11746 BC and
+from the built payload (2026-09-26, re-measured unchanged on the 2026-10-22
+build: astronomical −11744..−5408, 6,337 years): **no log is alive between 11746 BC and
 5408 BC**, ~6,340 years. Before it, only the anchored French Late Glacial pines
 (fra053–055, 12429–11746 BC); after it, continuous coverage from swed334
 onward. The Swiss floating collections would not fill it even once anchored —
