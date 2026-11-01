@@ -4,13 +4,16 @@
 
 An interactive view of individual subfossil and historical tree logs on a shared
 time axis. One rectangle per log, greedily packed into rows, coloured by taxon,
-with hover tooltips and click-through to each log's measured ring-width curve.
+with hover tooltips and click-through to each log's measured ring-width curve
+where the widths are open.
 A map view shows where the collections were taken, one pie per published
 coordinate, linked to the timeline.
 
-The corpus currently loaded is the ITRDB European measurement set —
-**73,390 logs · 2,038 sites · 12429 BC – 2025 CE**. Europe is where this
-started, not the limit of what it handles; see [Scope](#scope).
+The site draws expanded Europe from two sources:
+**123,370 logs · 8,497 sites · 12429 BC – 2025 CE** (85,186 ITRDB, 38,184 PANGAEA).
+A PANGAEA "site" is usually one object, and those logs are bars only: their dates
+are public, their ring widths restricted. Europe is where this started, not the
+limit of what it handles; see [Scope](#scope).
 
 Most tree-ring resources publish *site chronologies* — averaged curves. This
 shows the underlying measured series individually, which is what makes the
@@ -28,7 +31,7 @@ present. Merging both is planned but not done.
 ## Why the archive looks the way it does
 
 The corpus is overwhelmingly modern: 7 logs alive in 5000 BC, 81 at 1 CE, and
-58,976 in 1971. Packed together that is a ~59,000-row wedge, so the viewer zooms
+69,428 in 1971. Packed together that is a ~70,000-row wedge, so the viewer zooms
 on both axes and offers era filters. The **"Before 1 CE" + "Packed together"**
 view is the classic overlapping-chronology ladder, and the most legible entry
 point.
@@ -36,21 +39,23 @@ point.
 It also has a hole. No log is alive between 11746 BC and 5408 BC: before it
 there are only the anchored French Late Glacial pines, after it continuous
 coverage. The long Central European oak and pine chronology (Hohenheim) covers
-most of that interval, but its per-log measurements have not been published.
+most of that interval, but its per-log measurements for those years are not
+publicly available.
 
 ## Scope
 
 ITRDB publishes measurements under regional directories: `africa`, `asia`,
 `atlantic`, `australia`, `centralamerica`, `europe`, `northamerica`, and
-`southamerica`. This project reads `europe` today.
+`southamerica`. All can be mirrored for study (`python -m ehd.fetch --all`). The
+web build uses expanded Europe, the Western Palearctic, defined on site
+coordinates in `ehd/region.py`: all of `europe`, and `africa`, `asia` and
+`atlantic` by position.
 
-Nothing downstream of the fetch is Europe-specific. The `.rwl` parser, the
-duplicate reconciliation, the dating classifier, the packing, and the viewer all
-operate on logs without reference to region. Adding another regional corpus is a
-matter of parameterising the region — it is currently hardcoded in
-`ehd/config.py` (`ITRDB_EUROPE`) and `ehd/fetch.py` (`list_europe_files`,
-and the `raw/itrdb/europe` destination) — plus deciding how the viewer should
-present a corpus large enough that a single packed timeline stops being legible.
+The `.rwl` parser, the duplicate reconciliation, the dating classifier, the
+packing, and the viewer all operate on logs without reference to region. Going
+global means choosing the scope in `corpus.scoped_files`, and deciding how the
+viewer should present a corpus large enough that a single packed timeline stops
+being legible.
 
 The pipeline is also source-agnostic beyond ITRDB: any per-log corpus that can be
 expressed as series with ring widths and a dating status drops in as another
@@ -60,7 +65,8 @@ input.
 
 ```bash
 uv venv --python 3.12 && uv pip install pytest brotli   # once
-python -m ehd.fetch      # download corpus (~5,600 files) to the data root
+python -m ehd.fetch --templates   # download the corpus to the data root
+python -m ehd.pangaea    # PANGAEA's public tree-ring metadata
 python -m ehd.harvest    # study metadata + corpus reconciliation report
 python -m ehd.emit       # build web/data payloads
 python -m ehd.basemap    # map outlines from Natural Earth (pinned, checksummed)
@@ -105,12 +111,12 @@ regression test in `tests/`:
 
 Verification:
 
-- `pytest tests/` — 152 tests; the parser fixtures are the files that broke
-  earlier parsers.
-- `python -m ehd.validate` — **100.0000% span agreement with dplR across 65,438
+- `pytest tests/` — the parser fixtures are the files that broke earlier parsers.
+- `python -m ehd.validate` — **100.0000% span agreement with dplR across 76,397
   series**, 0 disagreements, 0 invariant failures, and 0 series found by dplR
-  that this parser misses. It additionally reads 11,512 series dplR cannot
-  (run 2026-10-19, dplR 1.7.9).
+  that this parser misses. It additionally reads 12,349 series dplR cannot
+  (run 2026-11-01, dplR 1.7.9). This covers ITRDB only: PANGAEA's bars have no
+  ring widths to read.
 - `ehd.emit` asserts the packing is overlap-free before writing.
 
 ## Payload size
@@ -122,10 +128,9 @@ of first load; `index.json` was compressed, but by an edge encoder tuned for
 speed rather than ratio. Pre-compressing both takes first load from 2,192,561 to
 678,710 bytes — 2.09 MiB to 0.64 MiB, 69% smaller — measured live rather than
 locally, since the ratio a CDN serves is not the ratio a build produces
-(2026-08-20, on that day's build). On the 2026-10-24 build (expanded Europe
-and the Hohenheim archive, 123,370 logs), first load is 1,258,673 bytes
-(1.20 MiB): `logs.bin` 737,276, `index.json` 495,884, and the page, `app.js`
-and `style.css` 25,513, measured live the same way. (The 2026-10-22 build,
+(2026-08-20, on that day's build). The current build's first load is
+1,258,954 bytes: `logs.bin` 737,276, `index.json` 495,884, and the page, `app.js`
+and `style.css` 25,794, measured live the same way. (The 2026-10-22 build,
 73,390 logs, was 655,918 bytes.) The map's
 coastline file (438 KB raw, 177 KB as served) is not part of first load; it is
 fetched the first time the map is opened.
@@ -142,8 +147,9 @@ length against `n_logs` and names the likely cause if it ever mismatches.
 
 Logs are labelled rather than silently mixed:
 
-- **absolutely dated** — calendar-dated and consistent with archive metadata
-  (73,036)
+- **absolutely dated** — calendar-dated by the depositors (123,016). For ITRDB
+  the dating is consistent with the archive's metadata; for PANGAEA's bars the
+  metadata is the only evidence available, because the widths are restricted.
 - **anchored** — a floating collection placed on the calendar by a reviewed
   anchor taken from its depositors' own dating statement, carried with its
   uncertainty (191, across 5 collections: the French Late Glacial pines
@@ -166,11 +172,13 @@ archive, so they stay floating until a placement can be tied to each file.
 
 ## Data source and credit
 
-All measurements come from the [NOAA/NCEI International Tree-Ring Data
-Bank](https://www.ncei.noaa.gov/products/paleoclimatology/tree-ring), contributed
-by the many investigators credited in each site record and reachable through the
-study links in the viewer. This project neither collected nor re-measured any
-rings; it parses, reconciles, and displays their published data.
+Ring widths come from the [NOAA/NCEI International Tree-Ring Data
+Bank](https://www.ncei.noaa.gov/products/paleoclimatology/tree-ring), and the
+bars without curves from the public metadata of the Hohenheim archive on
+[PANGAEA](https://www.pangaea.de). All of it was contributed by the many
+investigators credited in each site record and reachable through the study links
+in the viewer. This project neither collected nor re-measured any rings; it
+parses, reconciles, and displays their published data.
 
 Metadata defects found during reconciliation have been reported to NCEI, which
 has been correcting them — see `docs/ncei-metadata-report.md` and the
@@ -181,3 +189,6 @@ reruns it).
 
 Code: [MIT](LICENSE). The underlying ITRDB measurements are NOAA public-domain
 data and are not redistributed by this repository — `ehd.fetch` downloads them.
+The 540 Main-region oaks in the next build are from Land, Remmele & Küppers 2018
+([10.5281/zenodo.1326474](https://doi.org/10.5281/zenodo.1326474)), CC BY 4.0;
+`python -m ehd.zenodo` downloads them, and `ehd.emit` stops if they are missing.

@@ -13,6 +13,15 @@ after the deploy failed 3 checks on stale edge copies; a rerun passed).
 (README, "Payload size"; was 655,918 on the 2026-10-22 build). Previous
 deploy: 2026-10-22, `235d0882`, commit `c113dc5`, 73,390 logs.
 
+**Built locally 2026-11-01, not deployed or committed:** 540 Zenodo oaks
+(`ehd/zenodo.py`), 123,910 logs. See `docs/data-survey.md` 4d. Before deploying,
+open a log's curve in the viewer (not yet done); `README` payload sizes then need
+remeasuring live.
+
+**Every release follows `docs/RELEASE.md`** (checklist, log, and how to refine it).
+The oak release must also reword the README's "in the next build" licence note and
+add `python -m ehd.zenodo` to its pipeline list.
+
 **Known stale for this deploy:** the link-preview image `og.jpg` and its
 `og:image:alt` still show the old 1,463-circle Europe map; the alt text matches
 the image, so it is not wrong, only dated. Regenerate both together.
@@ -365,7 +374,7 @@ inference:
 |---|---|
 | ITRDB / NCEI | no Hohenheim study; only 14 measurement studies worldwide start before 3000 BC |
 | Zenodo, PANGAEA | ~~nothing relevant~~ **wrong (2026-10-24):** PANGAEA holds Friedrich, Kromer, Kaiser et al. 2001, 257 subfossil Late Glacial/Holocene pines (`doi:10.1594/PANGAEA.787724`), access-restricted — and ~53,000 restricted historical-timber series from German labs. See `docs/data-survey.md` |
-| DCCD | service down (2026-08-18: `dendro.dans.knaw.nl` resolves to 194.171.144.80 and completes a TLS handshake, then the request fails). **2026-10-24: the name no longer resolves at all** (`dig` empty; `dans.knaw.nl` itself is up), so the holdings, if they survive, are somewhere else — ask DANS |
+| DCCD | service down (2026-08-18: `dendro.dans.knaw.nl` resolves to 194.171.144.80 and completes a TLS handshake, then the request fails). **2026-10-24: the name no longer resolves at all** (`dig` empty; `dans.knaw.nl` itself is up), so the holdings, if they survive, are somewhere else. **2026-11-01: found on DataverseNL (4,260 datasets, about 30,000 measurement files, reaching -6401 by metadata), most behind a guestbook and CC BY-NC-ND. See `docs/data-survey.md` 4c** |
 | Billamboz German Neolithic oak (GERM021–031) | averaged `.crn` chronologies only, no per-log data |
 | Belfast Irish oak | in ITRDB only from 1531 CE |
 
@@ -879,6 +888,10 @@ the classic overlapping-chronology ladder and the most legible entry point.
     Younger Dryas") — 13 Zurich pines, 11,950–13,160 cal BP; the PDF did not
     extract. The current placements live in IntCal20's floating-sequence
     data; intchron.org and intcal.org did not yield it by URL guessing.
+
+  **Update 2026-10-31:** the IntCal20 archive on IntChron has them, and yields a
+  candidate anchor for swit240 only (year = ordinal - 12143; 41 Daettnau logs
+  stay floating). Not applied. See `docs/data-survey.md` 5a.
 
   What would settle it: IntCal20's per-sample records for the Swiss trees,
   with ring positions and series IDs matchable to the ITRDB `DAECHAL*` /

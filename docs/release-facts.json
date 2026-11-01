@@ -1,0 +1,56 @@
+{
+  "payload": {
+    "n_logs": 123370,
+    "n_sites": 8497,
+    "first_year": -12428,
+    "last_year": 2025,
+    "unified_rows": 69911,
+    "by_source": {
+      "itrdb": 85186,
+      "pangaea": 38184,
+      "zenodo": 0
+    },
+    "alive": {
+      "5000 BC": 7,
+      "1 CE": 81,
+      "1971 CE": 69428
+    },
+    "hole": {
+      "last_alive_before": "11746 BC",
+      "first_alive_after": "5408 BC",
+      "empty_years": 6337
+    },
+    "dating_logs": {
+      "absolute": 123016,
+      "anchored": 191,
+      "disputed": 77,
+      "unverified": 86
+    },
+    "dating_sites": {
+      "absolute": 8487,
+      "anchored": 5,
+      "disputed": 2,
+      "unverified": 3
+    },
+    "floating_withheld": 136,
+    "withdrawn_withheld": 3424,
+    "withdrawn_studies": 25
+  },
+  "first_load": {
+    "total": 1258954,
+    "by_path": {
+      "/": 2165,
+      "/app.js": 20688,
+      "/style.css": 2941,
+      "/data/logs.bin": 737276,
+      "/data/index.json": 495884
+    }
+  },
+  "validation": {
+    "agreement": "100.0000%",
+    "compared": 76397,
+    "only_ours": 12349,
+    "date": "2026-11-01",
+    "dplr": "1.7.9"
+  }
+}
