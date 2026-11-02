@@ -154,6 +154,11 @@ class Log:
     restricted: str = ""
     record_doi: str = ""   # this log's own record, where each log has one
     span_note: str = ""    # caveat on the span itself, shown with it
+    # Licence terms the viewer must state, with any change we made to the
+    # material (CC 4.0 section 3(a)(1)).  Empty for ITRDB and PANGAEA.
+    licence: str = ""
+    licence_url: str = ""
+    modified_note: str = ""
 
     @property
     def n_rings(self) -> int:

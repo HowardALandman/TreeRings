@@ -118,6 +118,9 @@ async function load() {
       ? `${s.pangaea_plotted.toLocaleString()} timbers from the Hohenheim archive on PANGAEA, ` +
         'drawn from public metadata (ring widths restricted) · '
       : '') +
+    (s.zenodo_plotted
+      ? `${s.zenodo_plotted.toLocaleString()} subfossil oaks from Zenodo · `
+      : '') +
     (s.logs_anchored
       ? `${s.logs_anchored.toLocaleString()} floating logs placed by their published calendar anchor · `
       : '') +
@@ -776,7 +779,7 @@ async function showDetail(i) {
     ['Elevation', site.elev ? site.elev + ' m' : ''],
     ['Measurement', site.variant],
     ['Collected by', site.who],
-    site.restricted ? ['Source', 'PANGAEA'] : ['ITRDB code', site.code],
+    site.source ? ['Source', site.source] : ['ITRDB code', site.code],
     ['Dating', datingBadge(site)],
     ['Ring widths', site.restricted
       ? `<span class="badge restricted">restricted</span> ${esc(site.restricted)}` : ''],
@@ -784,6 +787,9 @@ async function showDetail(i) {
     [site.dois && site.dois.length > 1 ? 'DOIs' : 'DOI', (site.dois || [])
       .map((d) => `<a href="https://doi.org/${esc(d)}" target="_blank" rel="noopener">${esc(d)}</a>`)
       .join('<br>')],
+    ['Licence', site.licence
+      ? `<a href="${esc(site.licence_url)}" target="_blank" rel="noopener">${esc(site.licence)}</a>` : ''],
+    ['Changes', site.modified],
   ];
   $('d-fields').innerHTML = rows
     .filter(([, v]) => v)
@@ -815,7 +821,7 @@ async function showDetail(i) {
 }
 
 // Detail rows whose values are built as HTML above (everything else is escaped).
-const HTML_ROWS = new Set(['Dating', 'Study', 'Ring widths']);
+const HTML_ROWS = new Set(['Dating', 'Study', 'Ring widths', 'Licence']);
 
 function datingBadge(site) {
   const d = site.dating;

@@ -185,6 +185,52 @@ def _detect_stop_marker(lines: list[str]) -> tuple[int, float]:
     return STOP_001, 0.01
 
 
+def parse_tucson_blocks(path: str) -> ParseResult:
+    """Parse a Tucson file whose series IDs are not unique, one series per block.
+
+    ``parse_rwl`` keys on the ID, which is right for ITRDB but merges distinct
+    trees in a file that reuses IDs: Zenodo 1326474 holds 540 oaks under 196 IDs,
+    and ``parse_rwl`` returns 196 series.  Here the stop marker alone ends a
+    series.  That is only sound where a marker cannot be a real ring, so a file
+    in 0.001 mm units, or any break in the year sequence inside a block, is
+    reported as a warning for the caller to refuse.
+
+    IDs are returned as the file gives them, repeats included.
+    """
+    result = ParseResult()
+    name = os.path.basename(path)
+    lines = _read_lines(path)
+    if _detect_stop_marker(lines)[0] != STOP_001:
+        result.warnings.append(f"{name}: not a 999-terminated file")
+        return result
+
+    series_id, first, vals = "", 0, []
+    open_block = False
+    for lineno, line_id, year, values in _iter_data_lines(lines):
+        result.n_data_lines += 1
+        if not open_block:
+            series_id, first, vals, open_block = line_id, year, [], True
+        elif line_id != series_id or year != first + len(vals):
+            result.warnings.append(
+                f"{name}:{lineno}: {line_id!r} year {year} does not continue "
+                f"{series_id!r} from {first} with {len(vals)} rings")
+        for value in values:
+            if not open_block:
+                result.warnings.append(f"{name}:{lineno}: values after a stop marker")
+                break
+            if value == STOP_001:
+                result.series.append(Series(
+                    series_id=series_id, source_file=name, first_year=first,
+                    last_year=first + len(vals) - 1, values=vals,
+                    precision_mm=0.01))
+                open_block = False
+            else:
+                vals.append(None if value == MISSING_VALUE else value)
+    if open_block:
+        result.warnings.append(f"{name}: {series_id!r} from {first} has no stop marker")
+    return result
+
+
 def parse_rwl(path: str) -> ParseResult:
     """Parse one ``.rwl`` file into per-log series.
 

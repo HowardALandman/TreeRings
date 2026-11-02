@@ -24,7 +24,7 @@ import json
 import os
 import sys
 
-from . import compress, config, corpus, pack, pangaea
+from . import compress, config, corpus, pack, pangaea, zenodo
 
 # Band order on screen.  This is also the categorical colour order, chosen so
 # that the three warm hues are never adjacent - see the palette validation in
@@ -117,8 +117,13 @@ def main(argv: list[str] | None = None) -> int:
     for k, v in sorted(pg_report.items(), key=lambda kv: -kv[1]):
         print(f"    {v:7}  {k}")
 
+    # Third source: open per-tree ring widths from Zenodo.  Stops the build if
+    # the reviewed file is missing, changed, or found to duplicate ITRDB.
+    zen_logs, _ = zenodo.build_logs(itrdb_logs=logs)
+    print(f"  Zenodo: {len(zen_logs)} logs")
+
     live = [log for log in logs if not log.withdrawn]
-    plotted = [log for log in live if log.dating != "floating"] + pg_logs
+    plotted = [log for log in live if log.dating != "floating"] + pg_logs + zen_logs
     floating = [log for log in live if log.dating == "floating"]
     anchored = [log for log in live if log.dating == "anchored"]
     disputed = [log for log in live if log.dating == "disputed"]
@@ -208,9 +213,12 @@ def main(argv: list[str] | None = None) -> int:
                 "url": log.url,
                 "dating": log.dating,
                 "variant": corpus.VARIANT_LABEL.get(log.variant, log.variant)
-                if log.source == "ITRDB" else "",
+                if not log.restricted else "",
                 **anchor,
-                # Only on PANGAEA sites, which have no ring widths to show.
+                **({"licence": log.licence, "licence_url": log.licence_url,
+                    "modified": log.modified_note} if log.licence else {}),
+                # "restricted" is non-empty on PANGAEA sites only, which have no
+                # ring widths to show.
                 **({"source": log.source, "restricted": log.restricted}
                    if log.source != "ITRDB" else {}),
             }
@@ -244,6 +252,7 @@ def main(argv: list[str] | None = None) -> int:
             "pangaea_plotted": len(pg_logs),
             "pangaea_sites": len({log.site for log in pg_logs}),
             "pangaea_excluded": {k: v for k, v in pg_report.items() if k != "plotted"},
+            "zenodo_plotted": len(zen_logs),
         },
     }
     index_path = os.path.join(web_data, "index.json")
@@ -254,7 +263,7 @@ def main(argv: list[str] | None = None) -> int:
     # --- ring widths, sharded by site ---------------------------------------
     shards: dict[str, dict[str, list]] = {}
     for log in plotted:
-        if log.source != "ITRDB":
+        if log.restricted:
             # No ring widths: the record's own DOI and any caveat on its span,
             # which the viewer shows in place of the curve.
             entry = {"f": log.first_year, "r": log.record_doi}
