@@ -9,8 +9,8 @@ where the widths are open.
 A map view shows where the collections were taken, one pie per published
 coordinate, linked to the timeline.
 
-The site draws expanded Europe from two sources:
-**123,370 logs · 8,497 sites · 12429 BC – 2025 CE** (85,186 ITRDB, 38,184 PANGAEA).
+The site draws expanded Europe from three sources:
+**123,910 logs · 8,498 sites · 12429 BC – 2025 CE** (85,186 ITRDB, 38,184 PANGAEA, 540 Zenodo).
 A PANGAEA "site" is usually one object, and those logs are bars only: their dates
 are public, their ring widths restricted. Europe is where this started, not the
 limit of what it handles; see [Scope](#scope).
@@ -30,13 +30,13 @@ present. Merging both is planned but not done.
 
 ## Why the archive looks the way it does
 
-The corpus is overwhelmingly modern: 7 logs alive in 5000 BC, 81 at 1 CE, and
+The corpus is overwhelmingly modern: 85 logs alive in 5000 BC, 81 at 1 CE, and
 69,428 in 1971. Packed together that is a ~70,000-row wedge, so the viewer zooms
 on both axes and offers era filters. The **"Before 1 CE" + "Packed together"**
 view is the classic overlapping-chronology ladder, and the most legible entry
 point.
 
-It also has a hole. No log is alive between 11746 BC and 5408 BC: before it
+It also has a hole. No log is alive between 11746 BC and 6228 BC: before it
 there are only the anchored French Late Glacial pines, after it continuous
 coverage. The long Central European oak and pine chronology (Hohenheim) covers
 most of that interval, but its per-log measurements for those years are not
@@ -67,6 +67,7 @@ input.
 uv venv --python 3.12 && uv pip install pytest brotli   # once
 python -m ehd.fetch --templates   # download the corpus to the data root
 python -m ehd.pangaea    # PANGAEA's public tree-ring metadata
+python -m ehd.zenodo     # the Zenodo oaks, checked against their MD5
 python -m ehd.harvest    # study metadata + corpus reconciliation report
 python -m ehd.emit       # build web/data payloads
 python -m ehd.basemap    # map outlines from Natural Earth (pinned, checksummed)
@@ -129,8 +130,8 @@ speed rather than ratio. Pre-compressing both takes first load from 2,192,561 to
 678,710 bytes — 2.09 MiB to 0.64 MiB, 69% smaller — measured live rather than
 locally, since the ratio a CDN serves is not the ratio a build produces
 (2026-08-20, on that day's build). The current build's first load is
-1,258,954 bytes: `logs.bin` 737,276, `index.json` 495,884, and the page, `app.js`
-and `style.css` 25,794, measured live the same way. (The 2026-10-22 build,
+1,263,649 bytes: `logs.bin` 740,181, `index.json` 497,736, and the page, `app.js`
+and `style.css` 25,732, measured live the same way. (The 2026-10-22 build,
 73,390 logs, was 655,918 bytes.) The map's
 coastline file (438 KB raw, 177 KB as served) is not part of first load; it is
 fetched the first time the map is opened.
@@ -147,9 +148,10 @@ length against `n_logs` and names the likely cause if it ever mismatches.
 
 Logs are labelled rather than silently mixed:
 
-- **absolutely dated** — calendar-dated by the depositors (123,016). For ITRDB
+- **absolutely dated** — calendar-dated by the depositors (123,556). For ITRDB
   the dating is consistent with the archive's metadata; for PANGAEA's bars the
-  metadata is the only evidence available, because the widths are restricted.
+  metadata is the only evidence available, because the widths are restricted. The
+  Zenodo oaks carry the depositors' span, checked at both ends against the record.
 - **anchored** — a floating collection placed on the calendar by a reviewed
   anchor taken from its depositors' own dating statement, carried with its
   uncertainty (191, across 5 collections: the French Late Glacial pines
@@ -175,7 +177,8 @@ archive, so they stay floating until a placement can be tied to each file.
 Ring widths come from the [NOAA/NCEI International Tree-Ring Data
 Bank](https://www.ncei.noaa.gov/products/paleoclimatology/tree-ring), and the
 bars without curves from the public metadata of the Hohenheim archive on
-[PANGAEA](https://www.pangaea.de). All of it was contributed by the many
+[PANGAEA](https://www.pangaea.de). The 540 Neolithic oaks are from
+[Zenodo](https://doi.org/10.5281/zenodo.1326474). All of it was contributed by the many
 investigators credited in each site record and reachable through the study links
 in the viewer. This project neither collected nor re-measured any rings; it
 parses, reconciles, and displays their published data.
@@ -189,6 +192,6 @@ reruns it).
 
 Code: [MIT](LICENSE). The underlying ITRDB measurements are NOAA public-domain
 data and are not redistributed by this repository — `ehd.fetch` downloads them.
-The 540 Main-region oaks in the next build are from Land, Remmele & Küppers 2018
+The 540 Main-region oaks are from Land, Remmele & Küppers 2018
 ([10.5281/zenodo.1326474](https://doi.org/10.5281/zenodo.1326474)), CC BY 4.0;
 `python -m ehd.zenodo` downloads them, and `ehd.emit` stops if they are missing.

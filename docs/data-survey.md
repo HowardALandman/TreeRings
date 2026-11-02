@@ -336,7 +336,7 @@ it. **No overlap**: 0 exact, 0 sharing a 20-ring window with any of 382,245 mirr
 series that start before 1000 CE. Site code `EBEN` resembles IntCal's Ebensfeld timbers, so
 this may be Hohenheim material (a guess, unchecked).
 
-**Ingested 2026-11-01** (`ehd/zenodo.py`; local build, not deployed). Against the
+**Ingested 2026-11-01, deployed 2026-11-02** (`ehd/zenodo.py`). Against the
 previous payload: 0 logs lost, 540 added, no existing site record changed. Shards
 equal an independent scanner's reading on all 540. Plotted logs now leave
 -11744..-6228 uncovered. dplR not run on this file. 472 logs have numbered display

@@ -4,23 +4,13 @@ Interactive view of individual subfossil and historical tree logs on a shared
 time axis: one rectangle per log, greedily packed into rows, coloured by taxon,
 with hover tooltips and click-through to each log's measured ring-width curve.
 
-**Status: latest production deploy 2026-10-24** (deployment
-`79b358e0.ehd-612.pages.dev`, commit `6e4daf7`): the expanded-Europe +
-Hohenheim build below, now live, with map-circle merging and the narrowed
-circle-size slider (0.3-2.2). `verify_deploy.py` 92/92 (the first run right
-after the deploy failed 3 checks on stale edge copies; a rerun passed).
-**123,370 logs**, dplR cross-validation 100%. Live first load 1,258,673 bytes
-(README, "Payload size"; was 655,918 on the 2026-10-22 build). Previous
-deploy: 2026-10-22, `235d0882`, commit `c113dc5`, 73,390 logs.
-
-**Built locally 2026-11-01, not deployed or committed:** 540 Zenodo oaks
-(`ehd/zenodo.py`), 123,910 logs. See `docs/data-survey.md` 4d. Before deploying,
-open a log's curve in the viewer (not yet done); `README` payload sizes then need
-remeasuring live.
+**Status: latest production deploy 2026-11-02** (deployment `51308fa7`, commit
+`1d3c04d`): the 2026-10-24 build plus 540 Neolithic oaks from Zenodo
+(`ehd/zenodo.py`, `docs/data-survey.md` 4d). **123,910 logs**; the hole in plotted
+coverage is now 11746-6228 BC (5,517 years). `verify_deploy.py` 92/92. Live numbers:
+`docs/release-facts.json`. History of deploys: the log in `docs/RELEASE.md`.
 
 **Every release follows `docs/RELEASE.md`** (checklist, log, and how to refine it).
-The oak release must also reword the README's "in the next build" licence note and
-add `python -m ehd.zenodo` to its pipeline list.
 
 **Known stale for this deploy:** the link-preview image `og.jpg` and its
 `og:image:alt` still show the old 1,463-circle Europe map; the alt text matches
@@ -381,7 +371,8 @@ inference:
 The public record therefore has a hole where Hohenheim should be. Measured
 from the built payload (2026-09-26, re-measured unchanged on the 2026-10-22
 build: astronomical −11744..−5408, 6,337 years): **no log is alive between 11746 BC and
-5408 BC**, ~6,340 years. Before it, only the anchored French Late Glacial pines
+5408 BC**, ~6,340 years. (Since the 2026-11-02 oak release the hole ends at 6228 BC,
+5,517 years; the rest of this section describes the earlier state.) Before it, only the anchored French Late Glacial pines
 (fra053–055, 12429–11746 BC); after it, continuous coverage from swed334
 onward. The Swiss floating collections would not fill it even once anchored —
 their declared ranges sit at ~13,050–10,800 BC. (This line used to say

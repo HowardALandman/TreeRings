@@ -90,11 +90,18 @@ were not run against this checklist.
 
 | Date | Deployment | Commit | Logs | First load (bytes) | Notes |
 |---|---|---|---:|---:|---|
+| 2026-11-02 | `51308fa7` | `1d3c04d` | 123,910 | 1,263,649 | 540 Zenodo oaks. Diff: 540 added, 0 lost, 1 site added, 0 site records changed. Test deploy `fbfd69e7` 80/80; Howard checked it in a browser; production 92/92. Step 6 (dplR) not rerun: ITRDB input unchanged since the 2026-11-01 run, and dplR cannot read the oak file's repeated IDs as separate series; the oaks were checked by an independent scanner instead. Step 14: `og.jpg` not recaptured (the oaks add one point inside an existing merged circle). |
 | 2026-11-01 | none | | 123,370 | 1,258,954 | No deploy: records the live 2026-10-24 build when this method began. dplR rerun: 100.0000% on 76,397, 12,349 ours only, 0 invariant failures. |
 | 2026-10-24 | `79b358e0` | `6e4daf7` | 123,370 | 1,258,673 | Expanded Europe + Hohenheim. First `verify_deploy` failed 3 checks on stale edge copies; rerun passed 92/92. |
 | 2026-10-22 | `235d0882` | `c113dc5` | 73,390 | 655,918 | Previous deploy. |
 
 ### Method changes
+
+- **2026-11-02.** Small first-load files vary between measurements with no source
+  change: `style.css` went from 2,941 to 2,944 bytes as served, unchanged in git,
+  presumably edge compression. So `release_facts.py --check` compares the payload
+  only, and the README's first-load figure is a dated measurement, not a constant.
+  This probably also explains the 281 bytes noted below.
 
 - **2026-11-01, method created.** Why: the README still said 73,390 logs eight days
   after 123,370 went live, and described the corpus as ITRDB only. Nothing tied it to
