@@ -1,0 +1,168 @@
+% Hackers Conference Show and Tell: the 2 minutes that are not the site demo.
+% Numbers measured 2026-11-01 from the live payload and the local oak build.
+%
+% Defined: the oak build, live since 2026-11-02.  Commented out: the numbers of
+% the 2026-10-24 build, kept so the two can be compared.
+\def\withoaks{}
+%
+% Build (nothing lands in this directory but the PDF you copy back):
+%   pdflatex -output-directory=<scratch> Hackers2026.tex   (twice)
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+\usepackage{booktabs}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\setbeamertemplate{navigation symbols}{}
+
+\definecolor{darkblue}{RGB}{0,0,139}
+\setbeamercolor{title}{fg=white,bg=darkblue}
+\setbeamercolor{frametitle}{fg=white,bg=darkblue}
+
+\ifdefined\withoaks
+  \newcommand{\nlogs}{123,910}
+  \newcommand{\treeyears}{16.0 million}
+  \newcommand{\aliveold}{85}
+  \newcommand{\holeyears}{5,517}
+  \newcommand{\holeend}{6228}
+  \newcommand{\holeendast}{-6228}
+  \newcommand{\alivefile}{alive-oak.dat}
+  \newcommand{\oakstatus}{Curves}
+\else
+  \newcommand{\nlogs}{123,370}
+  \newcommand{\treeyears}{15.9 million}
+  \newcommand{\aliveold}{7}
+  \newcommand{\holeyears}{6,337}
+  \newcommand{\holeend}{5408}
+  \newcommand{\holeendast}{-5408}
+  \newcommand{\alivefile}{alive-live.dat}
+  \newcommand{\oakstatus}{Next build}
+\fi
+
+\title{Tree Rings on One Timeline}
+\subtitle{\texttt{treerings.howardalandman.org}}
+\author{Howard A. Landman}
+\date{Hackers Conference, November 2026}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{The record is huge, and almost all of it is recent}
+\begin{columns}[T]
+\column{0.31\textwidth}
+\centering{\Large\textbf{\nlogs}}\\[-0.1em]
+{\footnotesize measured tree-ring series}
+\column{0.31\textwidth}
+\centering{\Large\textbf{\treeyears}}\\[-0.1em]
+{\footnotesize tree-years}
+\column{0.31\textwidth}
+\centering{\Large\textbf{14,454 years}}\\[-0.1em]
+{\footnotesize 12429 BC to 2025 CE}
+\end{columns}
+\vspace{0.3em}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.95\textwidth, height=4.6cm,
+  ymode=log, ymin=1, ymax=100000,
+  xmin=-12600, xmax=2100,
+  xtick={-12000,-10000,-8000,-6000,-4000,-2000,1,2000},
+  xticklabels={12000 BC,10000,8000,6000,4000,2000 BC,1 CE,2000},
+  scaled x ticks=false,
+  ytick={1,10,100,1000,10000,100000},
+  yticklabels={1,10,100,1000,10000,100000},
+  ylabel={series alive (log scale)},
+  ylabel style={font=\scriptsize}, tick label style={font=\scriptsize},
+  axis lines=left, grid=major, grid style={gray!20},
+  unbounded coords=jump, clip=false,
+]
+\fill[gray!18] (axis cs:-11745,1) rectangle (axis cs:\holeendast,100000);
+\node[font=\footnotesize,align=center] at (axis cs:{(-11745+\holeendast)/2},300)
+  {\textbf{\holeyears\ years with no series}\\11746--\holeend\ BC};
+\addplot[darkblue, line width=1.2pt, mark=none] table[x=year,y=alive] {\alivefile};
+\node[font=\scriptsize,anchor=south east] at (axis cs:1971,69428) {69,428 in 1971};
+\node[font=\scriptsize,anchor=south] at (axis cs:-4700,500) {\aliveold\ in 5001 BC};
+\end{axis}
+\end{tikzpicture}
+
+\vspace{0.1em}
+{\small The hole is in public access, not in the wood:
+published chronologies run through it.}
+\note{About 40 s.
+Each bar on the site is one measured series: a core or radius, not always a whole tree.
+The scale is logarithmic, so the right side is thousands of times denser than the left.
+82 percent of series start after 1500. Only about one percent start before 1 CE.
+The grey band is a gap in what I can show. Tree-ring labs have built chronologies through it,
+and radiocarbon records name timbers across most of it, but most per-tree measurements are not open.}
+\end{frame}
+
+\begin{frame}{The data is scattered, and the oldest is the hardest to get}
+\centering
+\footnotesize
+\begin{tabular}{@{}lp{5.3cm}p{3.9cm}l@{}}
+\toprule
+\textbf{Source} & \textbf{What it holds} & \textbf{Access} & \textbf{On the site}\\
+\midrule
+ITRDB (NOAA) & 285,774 series; 85,186 in our region & Open & Curves\\
+PANGAEA & Hohenheim archive: 38,184 timbers & Dates public, widths closed & Bars only\\
+Zenodo & 540 Neolithic oaks, from one paper & Open, CC BY & \oakstatus\\
+DCCD & 30,135 files; old server gone & Guestbook, No Derivatives & Asking\\
+IntCal archive & 39 new European trees & Terms unclear & Not yet\\
+CEZA Mannheim & About 3,000 boxes, being digitized & Not public & Not yet\\
+\bottomrule
+\end{tabular}
+
+\vspace{0.4em}
+\begin{itemize}\footnotesize
+\item \textbf{No common index:} one registry of repositories didn't even list DCCD.
+\item \textbf{No common format:} fixed-width Tucson, Heidelberg, TRiDaS XML.
+\item \textbf{Open is not simple:} licences may let you read data but not redraw it.
+``No Derivatives'' lets you add data to a larger collection unchanged, but not correct it,
+and may bar merging it into a database.
+\end{itemize}
+\note{About 40 s.
+Nobody holds the whole picture. The biggest archive by far is the open one, but it is mostly recent trees.
+The Hohenheim lab dissolved in February 2026; its collection is now at CEZA in Mannheim.
+The DCCD looked dead until its contents turned up on DataverseNL; the format site tridas.org now serves a gambling site.
+The legal question is live: whether drawing a bar from No Derivatives data counts as a derivative. I am asking the depositors rather than assuming.}
+\end{frame}
+
+\begin{frame}{Checking everything found real errors, including ours}
+\vspace{-0.5em}
+\begin{columns}[T]
+\column{0.49\textwidth}
+\textbf{Ours}
+\begin{itemize}\footnotesize
+\item \textbf{111 Ice Age pines drawn at 1--434 CE}, off by over 10,000 years. No error raised:
+we were reading a silently frozen metadata format.
+\item \textbf{Every BC label one year late.} The files have a year 0.
+\item \textbf{``Nothing on PANGAEA.''} We searched by name; 53,094 records were there.
+\end{itemize}
+\column{0.49\textwidth}
+\textbf{The archives'}
+\begin{itemize}\footnotesize
+\item \textbf{152 files disagreed with their own records}, 19 by over 100 years.
+We reported them; NOAA worked through them: 12 left.
+\item \textbf{3,424 series withdrawn but still served}; we withhold them.
+\item \textbf{Ring widths alone caught one-year slips} in pines from about 6200 BC,
+confirming a depositor's note and flagging a new candidate.
+\end{itemize}
+\end{columns}
+
+\vspace{0.2em}
+\begin{block}{}
+\centering\footnotesize
+Sources fail silently, so we cross-check: spans match dplR, an independent reader,
+on all 76,397 series it reads.\\
+\textbf{Next: recompute the alignments from the rings, so overlaps are verified, not just asserted.}
+\end{block}
+\note{About 40 s.
+The theme: nothing crashed. Everything returned a confident, wrong answer.
+The pines are my favourite: they were wrong for the life of the project until a metadata check caught them.
+All dates on the site are still the depositors' own. Recomputing them is the next big step.
+The one-year-slip check is a small first test of that: two series, one depositor, a handful of controls.}
+\end{frame}
+
+\end{document}

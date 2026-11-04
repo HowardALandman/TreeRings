@@ -145,6 +145,12 @@ locally after changing `index.html`.
 
 ## Presenting the work (2026-10-19)
 
+**Hackers Conference Show and Tell (November 2026):** 4-minute slot, 2 minutes of
+site demo plus `docs/talks/hackers2026/` (title + 3 slides, script in `\note{}`).
+Numbers are the oak build's, measured from the payloads 2026-11-01; slides 2-3
+quote `docs/data-survey.md` and this file. Rebuild with `-output-directory` in a
+scratch dir. Delivered PDF is tracked, as in QTDvault.
+
 **Target: TRACE 2027** (Association for Tree-Ring Research annual meeting),
 24–29 May 2027, Tartu, Estonia (Estonian University of Life Sciences + Univ. of
 Tartu), https://trace2027.ee. **Abstract submission opens 2026-12-01, deadline
