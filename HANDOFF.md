@@ -16,6 +16,25 @@ coverage is now 11746-6228 BC (5,517 years). `verify_deploy.py` 92/92. Live numb
 `og:image:alt` still show the old 1,463-circle Europe map; the alt text matches
 the image, so it is not wrong, only dated. Regenerate both together.
 
+**Open threads (2026-11-04), all Howard's to send:**
+- Reinig mail, `docs/late-glacial-anchors-request.txt` (draft, uncommitted, has an
+  "6. 6." typo). It quotes the gap: since 2026-11-02 plotted coverage ends at 6228 BC,
+  not 5408 BC.
+- DCCD / Stichting RING mail, not drafted. Questions: may we draw bars and curves
+  from CC BY-NC-ND data (licence s.4 database right; corrections are modifications);
+  bulk access; year conventions (`.fh` `-N` = N BC; `dccd-period` fits neither
+  convention at Roderwolde's end); is `tridas.xml` authoritative; meaning of
+  `FirstValidRing`/`LastValidRing`; why the browser route asks no guestbook fields
+  while the API requires them; disclose our ~4,300-request metadata harvest
+  (~95/min); were the 2016 Roderwolde ring corrections (RWD00330, RWD00440) meant
+  to be in the widths, since crossdating says they are not; and RWD00830's possible
+  one-year slip after ring 71. Evidence: `docs/data-survey.md` 4c.
+- Until they answer: **no automated requests to DataverseNL, no DCCD data on the
+  site, no silent fixes of DCCD errors,** and no guestbook responses scripted in
+  Howard's name.
+- Land et al. 2019 (1,405 oaks, Zenodo 1453330): not ingested; check HISTRA overlap
+  first.
+
 **Next (Howard, 2026-10-24):** rethink at a higher level how the viewer's
 options are organized and set, before adding any more controls. The ITRDB /
 PANGAEA source switch waits on that. Step B (global test build) also open.
